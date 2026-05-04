@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "RestoManager",
+    "slug": "restomanager-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": { "backgroundColor": "#0d5c63" },
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.restomanager.mobile" },
+    "android": {
+      "package": "com.restomanager.mobile",
+      "adaptiveIcon": { "backgroundColor": "#0d5c63" }
+    },
+    "web": { "bundler": "metro" }
+  }
+}

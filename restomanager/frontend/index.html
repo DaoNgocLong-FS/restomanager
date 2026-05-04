@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<title>RestoManager</title>
+<script>
+  // Điều hướng theo phiên đăng nhập gần nhất
+  (function(){
+    try{
+      const u = JSON.parse(localStorage.getItem('rm_user') || 'null');
+      if (u && u.role === 'admin') location.replace('admin.html');
+      else location.replace('pos.html');
+    } catch(_){ location.replace('pos.html'); }
+  })();
+</script>
+</head>
+<body>
+<p style="font-family:sans-serif;text-align:center;margin-top:40px;">Đang chuyển hướng…</p>
+</body>
+</html>

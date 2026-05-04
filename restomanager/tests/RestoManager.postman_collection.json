@@ -1,0 +1,91 @@
+{
+  "info": {
+    "name": "RestoManager API",
+    "_postman_id": "restomanager-001",
+    "description": "Sample Postman collection cho RestoManager (login → token → các endpoint).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "host", "value": "http://localhost:3000/api" },
+    { "key": "token", "value": "" },
+    { "key": "refresh", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{host}}/health" }
+    },
+    {
+      "name": "Login admin",
+      "event": [{
+        "listen": "test",
+        "script": { "exec": [
+          "let j = pm.response.json();",
+          "if (j.success) {",
+          "  pm.collectionVariables.set('token', j.data.token);",
+          "  pm.collectionVariables.set('refresh', j.data.refresh_token);",
+          "}"
+        ]}
+      }],
+      "request": {
+        "method": "POST", "url": "{{host}}/auth/login",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"username\":\"admin\",\"password\":\"123\"}" }
+      }
+    },
+    {
+      "name": "Refresh",
+      "event": [{
+        "listen": "test",
+        "script": { "exec": [
+          "let j = pm.response.json();",
+          "if (j.success) { pm.collectionVariables.set('token', j.data.token); pm.collectionVariables.set('refresh', j.data.refresh_token); }"
+        ]}
+      }],
+      "request": {
+        "method": "POST", "url": "{{host}}/auth/refresh",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\"refresh_token\":\"{{refresh}}\"}" }
+      }
+    },
+    {
+      "name": "Me",
+      "request": {
+        "method": "GET", "url": "{{host}}/auth/me",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+      }
+    },
+    {
+      "name": "List tables (with status)",
+      "request": {
+        "method": "GET", "url": "{{host}}/tables?with_status=true",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+      }
+    },
+    {
+      "name": "List menu",
+      "request": {
+        "method": "GET", "url": "{{host}}/menu?active=true",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+      }
+    },
+    {
+      "name": "Create order (waiter)",
+      "request": {
+        "method": "POST", "url": "{{host}}/orders",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"table_code\":\"T1-01\",\n  \"waiter_name\":\"NV Test\",\n  \"items\":[\n    {\"item_name\":\"Phở Bò Kobe\",\"quantity\":2,\"price\":250000}\n  ]\n}" }
+      }
+    },
+    {
+      "name": "Stats overview",
+      "request": {
+        "method": "GET", "url": "{{host}}/stats/overview",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+      }
+    }
+  ]
+}

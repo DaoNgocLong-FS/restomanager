@@ -1,0 +1,34 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Test coverage
+coverage/
+
+# Expo / mobile
+mobile/.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

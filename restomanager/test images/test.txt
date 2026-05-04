@@ -1,0 +1,105 @@
+PS C:\Users\Admin> Show-Step 1 "Login để lấy refresh token"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BƯỚC 1: Login để lấy refresh token
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PS C:\Users\Admin>
+PS C:\Users\Admin> $loginBody = @{ username = "admin"; password = "123" } | ConvertTo-Json
+PS C:\Users\Admin> $login = Invoke-RestMethod -Uri "$base/auth/login" `
+>>     -Method POST -ContentType "application/json" -Body $loginBody
+PS C:\Users\Admin>
+PS C:\Users\Admin> $accessToken    = $login.data.token
+PS C:\Users\Admin> $refreshToken_1 = $login.data.refresh_token
+PS C:\Users\Admin>
+PS C:\Users\Admin> Write-Host "✓ Login OK" -ForegroundColor Green
+✓ Login OK
+PS C:\Users\Admin> Write-Host "  Access token  : $($accessToken.Substring(0,30))..."
+  Access token  : eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+PS C:\Users\Admin> Write-Host "  Refresh token : $($refreshToken_1.Substring(0,30))..."
+  Refresh token : eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+PS C:\Users\Admin> Show-Step 2 "Refresh lần 1 - phải thành công và trả token mới"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BƯỚC 2: Refresh lần 1 - phải thành công và trả token mới
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PS C:\Users\Admin>
+PS C:\Users\Admin> $refreshBody1 = @{ refresh_token = $refreshToken_1 } | ConvertTo-Json
+PS C:\Users\Admin> $r1 = Invoke-RestMethod -Uri "$base/auth/refresh" `
+>>     -Method POST -ContentType "application/json" -Body $refreshBody1
+PS C:\Users\Admin>
+PS C:\Users\Admin> $refreshToken_2 = $r1.data.refresh_token
+PS C:\Users\Admin>
+PS C:\Users\Admin> Write-Host "✓ Refresh OK: $($r1.message)" -ForegroundColor Green
+✓ Refresh OK: Đã làm mới phiên đăng nhập
+PS C:\Users\Admin> Write-Host "  Refresh token mới: $($refreshToken_2.Substring(0,30))..."
+  Refresh token mới: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+PS C:\Users\Admin>
+PS C:\Users\Admin> if ($refreshToken_1 -eq $refreshToken_2) {
+>>     Write-Host "✗ FAIL: token mới giống token cũ - rotation không hoạt động!" -ForegroundColor Red
+>>     exit 1
+>> } else {
+>>     Write-Host "✓ Token đã được rotate (token mới khác token cũ)" -ForegroundColor Green
+>> }
+✓ Token đã được rotate (token mới khác token cũ)
+PS C:\Users\Admin> Show-Step 3 "Dùng lại refresh token CŨ - phải bị từ chối"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BƯỚC 3: Dùng lại refresh token CŨ - phải bị từ chối
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PS C:\Users\Admin>
+PS C:\Users\Admin> try {
+>>     $bad = Invoke-RestMethod -Uri "$base/auth/refresh" `
+>>         -Method POST -ContentType "application/json" -Body $refreshBody1
+>>     Write-Host "✗ FAIL: token cũ vẫn dùng được!" -ForegroundColor Red
+>>     exit 1
+>> } catch {
+>>     $code = $_.Exception.Response.StatusCode.value__
+>>     if ($code -eq 401) {
+>>         Write-Host "✓ Token cũ bị từ chối với HTTP 401 (đúng)" -ForegroundColor Green
+>>     } else {
+>>         Write-Host "✗ FAIL: kỳ vọng 401, nhận $code" -ForegroundColor Red
+>>         exit 1
+>>     }
+>> }
+✓ Token cũ bị từ chối với HTTP 401 (đúng)
+PS C:\Users\Admin> Show-Step 4 "Logout với refresh token hiện tại"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BƯỚC 4: Logout với refresh token hiện tại
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PS C:\Users\Admin>
+PS C:\Users\Admin> $logoutBody = @{ refresh_token = $refreshToken_2 } | ConvertTo-Json
+PS C:\Users\Admin> $logout = Invoke-RestMethod -Uri "$base/auth/logout" `
+>>     -Method POST -ContentType "application/json" `
+>>     -Headers @{ Authorization = "Bearer $accessToken" } -Body $logoutBody
+PS C:\Users\Admin>
+PS C:\Users\Admin> Write-Host "✓ Logout OK: $($logout.message)" -ForegroundColor Green
+✓ Logout OK: Đã đăng xuất
+PS C:\Users\Admin> Show-Step 5 "Refresh sau khi đã logout - phải bị từ chối"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BƯỚC 5: Refresh sau khi đã logout - phải bị từ chối
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PS C:\Users\Admin>
+PS C:\Users\Admin> $refreshBody2 = @{ refresh_token = $refreshToken_2 } | ConvertTo-Json
+PS C:\Users\Admin> try {
+>>     Invoke-RestMethod -Uri "$base/auth/refresh" `
+>>         -Method POST -ContentType "application/json" -Body $refreshBody2
+>>     Write-Host "✗ FAIL: refresh vẫn hoạt động sau logout!" -ForegroundColor Red
+>>     exit 1
+>> } catch {
+>>     $code = $_.Exception.Response.StatusCode.value__
+>>     if ($code -eq 401) {
+>>         Write-Host "✓ Refresh sau logout bị từ chối với HTTP 401 (đúng)" -ForegroundColor Green
+>>     } else {
+>>         Write-Host "✗ FAIL: kỳ vọng 401, nhận $code" -ForegroundColor Red
+>>         exit 1
+>>     }
+>> }
+✓ Refresh sau logout bị từ chối với HTTP 401 (đúng)
+PS C:\Users\Admin> docker exec -it restomanager-postgres psql -U postgres -d restaurant_db -c "SELECT substring(token_hash, 1, 16) AS hash_prefix, user_id, revoked_at IS NOT NULL AS revoked, expires_at FROM refresh_tokens ORDER BY created_at DESC LIMIT 5;"
+   hash_prefix    |               user_id                | revoked |         expires_at
+------------------+--------------------------------------+---------+----------------------------
+ b4b4c57d6c39ed66 | e59ac803-f8a1-4516-b88c-08344a3b5dc8 | t       | 2026-06-03 09:09:26.777+00
+ 329058a63c6508ee | e59ac803-f8a1-4516-b88c-08344a3b5dc8 | t       | 2026-06-03 09:07:22.543+00
+(2 rows)

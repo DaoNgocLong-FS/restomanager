@@ -1,0 +1,381 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RestoManager API",
+    "version": "2.0.0",
+    "description": "REST API cho hệ thống F&B RestoManager. Mọi endpoint (trừ /auth/login & /auth/refresh) đều cần Bearer JWT.\n\n**Cách test nhanh:** bấm **Authorize** ở góc phải → nhập `Bearer <token>` (lấy từ /auth/login) → \"Try it out\" trên từng endpoint."
+  },
+  "servers": [
+    { "url": "/api", "description": "Cùng origin (qua Nginx proxy hoặc trực tiếp khi mở /api/docs)" },
+    { "url": "http://localhost:3000/api", "description": "Backend chạy trực tiếp" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data":    {},
+          "message": { "type": "string" },
+          "meta":    { "type": "object" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" },
+          "error":   {
+            "type": "object",
+            "properties": {
+              "code":    { "type": "string", "example": "TOKEN_EXPIRED" },
+              "details": {}
+            }
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "example": "admin" },
+          "password": { "type": "string", "example": "123" }
+        }
+      },
+      "LoginResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Envelope" },
+          { "type": "object", "properties": { "data": {
+            "type": "object",
+            "properties": {
+              "token":              { "type": "string" },
+              "refresh_token":      { "type": "string" },
+              "expires_in":         { "type": "integer", "example": 900 },
+              "refresh_expires_in": { "type": "integer", "example": 2592000 },
+              "token_type":         { "type": "string", "example": "Bearer" },
+              "user":               { "$ref": "#/components/schemas/User" }
+            }
+          }}}
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id":        { "type": "string", "format": "uuid" },
+          "username":  { "type": "string" },
+          "full_name": { "type": "string" },
+          "role":      { "type": "string", "enum": ["admin", "cashier", "waiter"] },
+          "email":     { "type": "string" },
+          "phone":     { "type": "string" },
+          "is_active": { "type": "boolean" }
+        }
+      },
+      "Table": {
+        "type": "object",
+        "properties": {
+          "id":         { "type": "string", "format": "uuid" },
+          "code":       { "type": "string", "example": "T1-01" },
+          "zone":       { "type": "string", "example": "indoor" },
+          "capacity":   { "type": "integer", "example": 4 },
+          "is_active":  { "type": "boolean" },
+          "status":     { "type": "string", "enum": ["empty","busy","pay"], "description": "Có khi truyền with_status=true" },
+          "mins":       { "type": "integer", "description": "Số phút bàn đã có khách" },
+          "spent":      { "type": "number" }
+        }
+      },
+      "MenuItem": {
+        "type": "object",
+        "properties": {
+          "id":            { "type": "string", "format": "uuid" },
+          "name":          { "type": "string" },
+          "description":   { "type": "string" },
+          "price":         { "type": "number" },
+          "category_code": { "type": "string", "example": "main" },
+          "category_name": { "type": "string" },
+          "emoji":         { "type": "string" },
+          "image_url":     { "type": "string" },
+          "is_active":     { "type": "boolean" }
+        }
+      },
+      "OrderItemInput": {
+        "type": "object",
+        "required": ["item_name", "quantity", "price"],
+        "properties": {
+          "menu_item_id": { "type": "string", "format": "uuid" },
+          "item_name":    { "type": "string", "example": "Phở Bò Kobe" },
+          "quantity":     { "type": "integer", "minimum": 1, "example": 2 },
+          "price":        { "type": "number", "example": 250000 },
+          "notes":        { "type": "string" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id":           { "type": "string", "format": "uuid" },
+          "code":         { "type": "string" },
+          "table_id":     { "type": "string", "format": "uuid" },
+          "table_code":   { "type": "string" },
+          "waiter_id":    { "type": "string", "format": "uuid" },
+          "waiter_name":  { "type": "string" },
+          "status":       { "type": "string", "enum": ["pending","serving","completed","cancelled"] },
+          "total_amount": { "type": "number" },
+          "items":        { "type": "array", "items": { "type": "object" } },
+          "created_at":   { "type": "string", "format": "date-time" }
+        }
+      },
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id":             { "type": "string", "format": "uuid" },
+          "code":           { "type": "string" },
+          "order_id":       { "type": "string", "format": "uuid" },
+          "table_code":     { "type": "string" },
+          "cashier_name":   { "type": "string" },
+          "total_amount":   { "type": "number" },
+          "discount":       { "type": "number" },
+          "vat_rate":       { "type": "number", "example": 8 },
+          "vat_amount":     { "type": "number" },
+          "final_amount":   { "type": "number" },
+          "paid_amount":    { "type": "number" },
+          "change_amount":  { "type": "number" },
+          "payment_method": { "type": "string", "enum": ["cash","card","transfer","online","grab","vnpay","banking","momo","zalopay"] },
+          "created_at":     { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "tags": [
+    { "name": "Auth",    "description": "Đăng nhập, refresh token" },
+    { "name": "Menu",    "description": "Thực đơn & danh mục" },
+    { "name": "Tables",  "description": "Bàn ăn" },
+    { "name": "Orders",  "description": "Đơn hàng" },
+    { "name": "Invoices","description": "Hoá đơn" },
+    { "name": "Stats",   "description": "Thống kê dashboard" },
+    { "name": "Logs",    "description": "Nhật ký hệ thống" },
+    { "name": "Files",   "description": "Upload file lên MinIO" },
+    { "name": "Health",  "description": "Trạng thái server" }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Health"], "security": [],
+        "summary": "Health check",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"], "security": [],
+        "summary": "Đăng nhập",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" }}}},
+        "responses": {
+          "200": { "description": "Đăng nhập thành công", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" }}}},
+          "401": { "description": "Sai thông tin", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }}}}
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": ["Auth"], "security": [],
+        "summary": "Refresh access token (rotate)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["refresh_token"],
+          "properties": { "refresh_token": { "type": "string" }}
+        }}}},
+        "responses": {
+          "200": { "description": "Đã làm mới phiên đăng nhập", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" }}}},
+          "401": { "description": "REFRESH_INVALID — refresh hỏng/hết hạn, buộc re-login" }
+        }
+      }
+    },
+    "/auth/me":     { "get":  { "tags": ["Auth"], "summary": "Thông tin user hiện tại", "responses": { "200": { "description": "OK" }}}},
+    "/auth/logout": { "post": { "tags": ["Auth"], "summary": "Đăng xuất",                "responses": { "200": { "description": "OK" }}}},
+
+    "/menu/categories": { "get": { "tags": ["Menu"], "summary": "Danh mục", "security": [], "responses": { "200": { "description": "OK" }}}},
+    "/menu": {
+      "get": {
+        "tags": ["Menu"], "security": [],
+        "summary": "Liệt kê món",
+        "parameters": [
+          { "name": "active",   "in": "query", "schema": { "type": "string", "enum": ["true","false"] }},
+          { "name": "category", "in": "query", "schema": { "type": "string" }},
+          { "name": "page",     "in": "query", "schema": { "type": "integer" }},
+          { "name": "limit",    "in": "query", "schema": { "type": "integer" }}
+        ],
+        "responses": { "200": { "description": "OK" }}
+      },
+      "post": {
+        "tags": ["Menu"],
+        "summary": "Tạo món (admin) — multipart, có upload ảnh",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
+          "type": "object",
+          "properties": {
+            "name":        { "type": "string" },
+            "description": { "type": "string" },
+            "price":       { "type": "number" },
+            "category_id": { "type": "string", "format": "uuid" },
+            "emoji":       { "type": "string" },
+            "image":       { "type": "string", "format": "binary" }
+          }
+        }}}},
+        "responses": { "201": { "description": "Đã tạo" }}
+      }
+    },
+
+    "/tables": {
+      "get": {
+        "tags": ["Tables"],
+        "summary": "Sơ đồ bàn",
+        "parameters": [
+          { "name": "with_status", "in": "query", "schema": { "type": "string", "enum": ["true","false"] }},
+          { "name": "zone",        "in": "query", "schema": { "type": "string" }}
+        ],
+        "responses": { "200": { "description": "OK" }}
+      },
+      "post": {
+        "tags": ["Tables"],
+        "summary": "Tạo bàn (admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["code","zone","capacity"],
+          "properties": {
+            "code":     { "type": "string", "example": "T1-99" },
+            "zone":     { "type": "string", "example": "indoor" },
+            "capacity": { "type": "integer", "example": 4 }
+          }
+        }}}},
+        "responses": { "201": { "description": "Đã tạo" }}
+      }
+    },
+
+    "/orders": {
+      "get":  {
+        "tags": ["Orders"], "summary": "Danh sách đơn",
+        "parameters": [
+          { "name": "status",     "in": "query", "schema": { "type": "string", "example": "pending,serving" }},
+          { "name": "table_code", "in": "query", "schema": { "type": "string" }},
+          { "name": "waiter_id",  "in": "query", "schema": { "type": "string" }}
+        ],
+        "responses": { "200": { "description": "OK" }}
+      },
+      "post": {
+        "tags": ["Orders"], "summary": "Tạo đơn mới (waiter / admin)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["waiter_name","items"],
+          "properties": {
+            "table_code":  { "type": "string", "example": "T1-01" },
+            "table_id":    { "type": "string", "format": "uuid" },
+            "waiter_name": { "type": "string", "example": "NV Test" },
+            "notes":       { "type": "string" },
+            "items":       { "type": "array", "items": { "$ref": "#/components/schemas/OrderItemInput" }}
+          }
+        }}}},
+        "responses": { "201": { "description": "Đã tạo", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" }}}}}
+      }
+    },
+    "/orders/by-table/{tableId}": {
+      "get": {
+        "tags": ["Orders"], "summary": "Đơn đang mở của 1 bàn",
+        "parameters": [{ "name": "tableId", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "responses": { "200": { "description": "OK (có thể trả null nếu chưa có đơn mở)" }}
+      }
+    },
+    "/orders/{id}": {
+      "get":    { "tags": ["Orders"], "summary": "Chi tiết đơn",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "responses": { "200": { "description": "OK" }}},
+      "delete": { "tags": ["Orders"], "summary": "Huỷ đơn",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "responses": { "200": { "description": "OK" }}}
+    },
+    "/orders/{id}/items": {
+      "post": {
+        "tags": ["Orders"], "summary": "Thêm món vào đơn",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/OrderItemInput" }}}
+        }}}},
+        "responses": { "200": { "description": "OK" }}
+      }
+    },
+    "/orders/{id}/items/{itemId}": {
+      "put":    { "tags": ["Orders"], "summary": "Sửa món trong đơn",
+        "parameters": [
+          { "name": "id",     "in": "path", "required": true, "schema": { "type": "string" }},
+          { "name": "itemId", "in": "path", "required": true, "schema": { "type": "string" }}
+        ],
+        "requestBody": { "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "quantity": { "type": "integer" }, "notes": { "type": "string" }}
+        }}}},
+        "responses": { "200": { "description": "OK" }}},
+      "delete": { "tags": ["Orders"], "summary": "Xoá món khỏi đơn",
+        "parameters": [
+          { "name": "id",     "in": "path", "required": true, "schema": { "type": "string" }},
+          { "name": "itemId", "in": "path", "required": true, "schema": { "type": "string" }}
+        ],
+        "responses": { "200": { "description": "OK" }}}
+    },
+    "/orders/{id}/status": {
+      "put": { "tags": ["Orders"], "summary": "Đổi status đơn",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["status"],
+          "properties": { "status": { "type": "string", "enum": ["pending","serving","completed","cancelled"] }}
+        }}}},
+        "responses": { "200": { "description": "OK" }}}
+    },
+    "/orders/{id}/checkout": {
+      "post": {
+        "tags": ["Orders"], "summary": "Thanh toán & lập hoá đơn (cashier / admin)",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["cashier_name"],
+          "properties": {
+            "cashier_name":   { "type": "string" },
+            "payment_method": { "type": "string", "enum": ["cash","card","transfer","online","grab","vnpay","banking","momo","zalopay"], "default": "cash" },
+            "vat_rate":       { "type": "number", "default": 8 },
+            "discount":       { "type": "number", "default": 0 },
+            "discount_note":  { "type": "string" },
+            "paid_amount":    { "type": "number" }
+          }
+        }}}},
+        "responses": { "201": { "description": "Đã thanh toán", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Invoice" }}}}}}
+    },
+
+    "/invoices": {
+      "get": {
+        "tags": ["Invoices"], "summary": "Lịch sử hoá đơn",
+        "parameters": [
+          { "name": "from", "in": "query", "schema": { "type": "string", "format": "date-time" }},
+          { "name": "to",   "in": "query", "schema": { "type": "string", "format": "date-time" }}
+        ],
+        "responses": { "200": { "description": "OK" }}
+      }
+    },
+    "/invoices/{id}": {
+      "get": { "tags": ["Invoices"], "summary": "Chi tiết hoá đơn",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }}],
+        "responses": { "200": { "description": "OK" }}}
+    },
+
+    "/files/upload": {
+      "post": {
+        "tags": ["Files"], "summary": "Upload file lên MinIO",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
+          "type": "object",
+          "properties": {
+            "file":   { "type": "string", "format": "binary" },
+            "prefix": { "type": "string", "example": "menu" }
+          }
+        }}}},
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "example": { "success": true, "data": { "url": "http://...", "key": "menu/abc.jpg" }}}}}}}
+    },
+
+    "/stats/overview": { "get": { "tags": ["Stats"], "summary": "Dashboard tổng quan", "responses": { "200": { "description": "OK" }}}},
+    "/stats/daily":    { "get": { "tags": ["Stats"], "summary": "Doanh thu theo ngày", "responses": { "200": { "description": "OK" }}}},
+    "/logs":           { "get": { "tags": ["Logs"],  "summary": "Nhật ký hoạt động",  "parameters": [{ "name": "limit", "in": "query", "schema": { "type": "integer" }}], "responses": { "200": { "description": "OK" }}}}
+  }
+}

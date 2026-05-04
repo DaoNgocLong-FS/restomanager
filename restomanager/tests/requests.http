@@ -1,0 +1,153 @@
+###############################################################################
+# RestoManager REST API – Sample requests
+# Mở file này bằng VSCode (extension "REST Client") hoặc JetBrains HTTP Client.
+# Mỗi block bắt đầu bằng "###" là 1 request — nhấn "Send Request" ở trên.
+#
+# Bước 1: chạy "Login admin" → response trả token, copy vào @token bên dưới.
+# (Hoặc dùng @{login.response.body.data.token} để auto-bind nếu IDE hỗ trợ.)
+###############################################################################
+
+@host        = http://localhost:3000
+@apiBase     = {{host}}/api
+@token       = PASTE_ACCESS_TOKEN_HERE
+@refresh     = PASTE_REFRESH_TOKEN_HERE
+
+# ─── HEALTH ──────────────────────────────────────────────────────────────────
+###
+GET {{apiBase}}/health
+
+# ─── AUTH ────────────────────────────────────────────────────────────────────
+### Login admin (mặc định 123)
+# @name login
+POST {{apiBase}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "123"
+}
+
+### Login waiter
+POST {{apiBase}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "waiter",
+  "password": "123"
+}
+
+### Refresh access token
+POST {{apiBase}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refresh}}"
+}
+
+### Lấy thông tin user hiện tại
+GET {{apiBase}}/auth/me
+Authorization: Bearer {{token}}
+
+### Logout
+POST {{apiBase}}/auth/logout
+Authorization: Bearer {{token}}
+
+# ─── MENU ────────────────────────────────────────────────────────────────────
+### Danh mục
+GET {{apiBase}}/menu/categories
+Authorization: Bearer {{token}}
+
+### Toàn bộ menu
+GET {{apiBase}}/menu?active=true
+Authorization: Bearer {{token}}
+
+### Lọc theo category code
+GET {{apiBase}}/menu?category=main&active=true
+Authorization: Bearer {{token}}
+
+# ─── TABLES ──────────────────────────────────────────────────────────────────
+### Sơ đồ bàn (with status)
+GET {{apiBase}}/tables?with_status=true
+Authorization: Bearer {{token}}
+
+### Tạo bàn (admin)
+POST {{apiBase}}/tables
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "code": "T1-99",
+  "zone": "indoor",
+  "capacity": 4
+}
+
+# ─── ORDERS ──────────────────────────────────────────────────────────────────
+### Tạo đơn mới (cần waiter token)
+# @name newOrder
+POST {{apiBase}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "table_code": "T1-01",
+  "waiter_name": "NV Test",
+  "items": [
+    { "item_name": "Phở Bò Kobe", "quantity": 2, "price": 250000 },
+    { "item_name": "Trà Đá",      "quantity": 4, "price": 5000 }
+  ]
+}
+
+### Lấy đơn đang mở của 1 bàn
+GET {{apiBase}}/orders/by-table/PASTE_TABLE_ID_HERE
+Authorization: Bearer {{token}}
+
+### Thêm món vào đơn
+POST {{apiBase}}/orders/{{newOrder.response.body.data.id}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "items": [
+    { "item_name": "Cà Phê Sữa Đá", "quantity": 1, "price": 35000 }
+  ]
+}
+
+### Đổi status đơn (waiter / cashier)
+PUT {{apiBase}}/orders/{{newOrder.response.body.data.id}}/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "status": "serving" }
+
+### Huỷ đơn
+DELETE {{apiBase}}/orders/{{newOrder.response.body.data.id}}
+Authorization: Bearer {{token}}
+
+# ─── CHECKOUT ────────────────────────────────────────────────────────────────
+### Thanh toán (cần cashier token)
+POST {{apiBase}}/orders/{{newOrder.response.body.data.id}}/checkout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cashier_name":   "Cashier Test",
+  "payment_method": "cash",
+  "vat_rate":       8,
+  "discount":       0,
+  "paid_amount":    600000
+}
+
+# ─── INVOICES ────────────────────────────────────────────────────────────────
+### Hoá đơn hôm nay
+GET {{apiBase}}/invoices?from=2026-04-26T00:00:00Z
+Authorization: Bearer {{token}}
+
+# ─── STATS ───────────────────────────────────────────────────────────────────
+### Dashboard overview
+GET {{apiBase}}/stats/overview
+Authorization: Bearer {{token}}
+
+# ─── LOGS ────────────────────────────────────────────────────────────────────
+### Activity logs
+GET {{apiBase}}/logs?limit=50
+Authorization: Bearer {{token}}
