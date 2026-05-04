@@ -196,6 +196,10 @@
     createTable:   (data)    => request('/tables', { method: 'POST', body: data }),
     updateTable:   (id, data)=> request('/tables/' + id, { method: 'PUT', body: data }),
     deleteTable:   (id)      => request('/tables/' + id, { method: 'DELETE' }),
+    setTableActive:(id, isActive) => request('/tables/' + id + '/active',
+      { method: 'PATCH', body: { is_active: !!isActive } }),
+    clearTable:    (id, reason) => request('/tables/' + id + '/clear',
+      { method: 'POST', body: reason ? { reason } : {} }),
 
     // ─── Orders ───
     listOrders:    (q)       => request('/orders', { query: q }),
@@ -210,6 +214,8 @@
       request('/orders/' + orderId + '/items/' + itemId, { method: 'DELETE' }),
     updateOrderStatus: (id, status) => request('/orders/' + id + '/status', { method: 'PUT', body: { status } }),
     cancelOrder:   (id)      => request('/orders/' + id, { method: 'DELETE' }),
+    moveOrder:     (id, toTableId) => request('/orders/' + id + '/move',
+      { method: 'POST', body: { to_table_id: toTableId } }),
     checkout:      (id, payload) => request('/orders/' + id + '/checkout', { method: 'POST', body: payload }),
 
     // ─── Invoices ───

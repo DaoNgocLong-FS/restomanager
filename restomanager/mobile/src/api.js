@@ -189,6 +189,10 @@ export const Api = {
   listMenu: (q) => request('/menu', { query: q }),
   // Tables
   listTables: (q) => request('/tables', { query: q }),
+  setTableActive: (id, isActive) => request('/tables/' + id + '/active',
+    { method: 'PATCH', body: { is_active: !!isActive } }),
+  clearTable: (id, reason) => request('/tables/' + id + '/clear',
+    { method: 'POST', body: reason ? { reason } : {} }),
   // Orders
   listOrders: (q) => request('/orders', { query: q }),
   getOrder: (id) => request('/orders/' + id),
@@ -200,6 +204,8 @@ export const Api = {
   removeOrderItem: (orderId, itemId) =>
     request('/orders/' + orderId + '/items/' + itemId, { method:'DELETE' }),
   cancelOrder: (id) => request('/orders/' + id, { method:'DELETE' }),
+  moveOrder: (id, toTableId) => request('/orders/' + id + '/move',
+    { method: 'POST', body: { to_table_id: toTableId } }),
   checkout: (id, payload) => request('/orders/' + id + '/checkout', { method:'POST', body: payload }),
   // Invoices
   listInvoices: (q) => request('/invoices', { query: q }),

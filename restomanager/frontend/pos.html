@@ -6,6 +6,7 @@
 <title>RestoManager – Hệ thống F&B (Order &amp; Cashier)</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="js/api.js"></script>
+<script src="js/table-context-menu.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -657,6 +658,7 @@ async function loadTablesFromApi(){
       id:t.code, dbId:t.id, zone:t.zone, cap:t.capacity,
       status, spent:Number(t.spent||0), mins:t.mins||0,
       open_order_id:t.open_order_id, open_order_code:t.open_order_code,
+      is_active: t.is_active !== false,
     };
   });
   TABLE_BY_CODE={};
@@ -770,26 +772,57 @@ async function initWaiter(){
   renderWaiterMenuCats();
 }
 
+// Helper: gắn context menu (right-click / long-press) cho 1 grid bàn.
+// Tìm thẻ bàn có thuộc tính data-table-id, lookup TABLE_BY_CODE và mở menu.
+function attachTableMenu(gridEl){
+  if (!gridEl || !window.RmTableMenu) return;
+  window.RmTableMenu.attach(gridEl, (target/*, ev*/) => {
+    // Tìm card cha gần nhất có data-table-id
+    const card = target && target.closest && target.closest('[data-table-id]');
+    if (!card) return null;
+    const code = card.getAttribute('data-table-id');
+    const t = TABLE_BY_CODE[code];
+    if (!t) return null;
+    // Chuẩn hoá object cho menu (giữ tương thích với shape API)
+    const tableForMenu = {
+      id:             t.dbId,
+      dbId:           t.dbId,
+      code:           t.id,        // mã hiển thị
+      zone:           t.zone,
+      capacity:       t.cap,
+      status:         t.status,
+      is_active:      t.is_active !== false,
+      open_order_id:  t.open_order_id || null,
+      open_order_code:t.open_order_code || null,
+    };
+    return { table: tableForMenu, role: (currentUser && currentUser.role) || null };
+  });
+}
+
 function renderWaiterTables(zone='all'){
   const grid=document.getElementById('w-table-grid');
   const filtered=zone==='all'?TABLES:TABLES.filter(t=>t.zone===zone);
   grid.innerHTML=filtered.map(t=>{
-    const cls=t.status==='busy'?'pill-busy':t.status==='pay'?'pill-pay':'pill-empty';
-    const lbl=t.status==='busy'?'Có khách':t.status==='pay'?'Chờ TT':'Trống';
-    const canOrder=t.status!=='pay';
-    return `<div class="card p-4 flex flex-col gap-3" onclick="${canOrder?`openWaiterMenu('${t.id}')`:`toast('Bàn đang chờ thanh toán','payments')`}">
+    const inactive = t.status==='inactive' || t.is_active===false;
+    const cls=inactive?'pill-empty':t.status==='busy'?'pill-busy':t.status==='pay'?'pill-pay':'pill-empty';
+    const lbl=inactive?'Tạm khoá':t.status==='busy'?'Có khách':t.status==='pay'?'Chờ TT':'Trống';
+    const canOrder=!inactive && t.status!=='pay';
+    const dimCls = inactive ? 'opacity-60' : '';
+    return `<div class="card p-4 flex flex-col gap-3 ${dimCls}" data-table-id="${t.id}" onclick="${canOrder?`openWaiterMenu('${t.id}')`:inactive?`toast('Bàn đang tạm khoá','block')`:`toast('Bàn đang chờ thanh toán','payments')`}">
       <div class="flex items-center justify-between">
         <span class="font-bold text-on-surface text-lg">${t.id}</span>
         <span class="${cls} text-xs font-semibold px-2 py-0.5 rounded-full">${lbl}</span>
       </div>
       <div class="flex items-center gap-1 text-xs text-on-surface-variant"><span class="material-symbols-outlined text-[14px]">group</span>${t.cap} chỗ</div>
-      ${t.status!=='empty'?`<div class="flex items-center justify-between text-xs">
+      ${!inactive && t.status!=='empty'?`<div class="flex items-center justify-between text-xs">
         <span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">schedule</span>${t.mins} phút</span>
         <span class="font-semibold text-primary">${fmt(t.spent)}</span>
-      </div>`:'<div class="text-xs text-on-surface-variant">Chưa có khách</div>'}
+      </div>`:inactive?'<div class="text-xs text-on-surface-variant">Bàn tạm khoá</div>':'<div class="text-xs text-on-surface-variant">Chưa có khách</div>'}
       ${canOrder&&t.status!=='empty'?`<button class="w-full h-9 bg-primary text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1"><span class="material-symbols-outlined text-[16px]">add</span>Thêm món</button>`:''}
     </div>`;
   }).join('');
+  // Gắn context menu (right-click / long-press) - chỉ làm 1 lần
+  attachTableMenu(grid);
 }
 
 async function waiterZone(zone,btn){
@@ -1034,17 +1067,19 @@ function refreshCashierTables(zone='all'){
     pendingForTable[o.tableId]+=o.total;
   });
   grid.innerHTML=filtered.map(t=>{
-    const cls=t.status==='busy'?'pill-busy':t.status==='pay'?'pill-pay':'pill-empty';
-    const lbl=t.status==='busy'?'Có khách':t.status==='pay'?'Chờ TT':'Trống';
+    const inactive = t.status==='inactive' || t.is_active===false;
+    const cls=inactive?'pill-empty':t.status==='busy'?'pill-busy':t.status==='pay'?'pill-pay':'pill-empty';
+    const lbl=inactive?'Tạm khoá':t.status==='busy'?'Có khách':t.status==='pay'?'Chờ TT':'Trống';
     const hasPending=pendingForTable[t.id];
-    const clickable=t.status!=='empty';
-    return `<div class="card p-4 flex flex-col gap-3 ${clickable?'':'opacity-60 pointer-events-none'}" onclick="openCashierDetail('${t.id}')">
+    const clickable=!inactive && t.status!=='empty';
+    const dimCls = inactive ? 'opacity-50' : (clickable?'':'opacity-60');
+    return `<div class="card p-4 flex flex-col gap-3 ${dimCls}" data-table-id="${t.id}" onclick="${clickable?`openCashierDetail('${t.id}')`:''}">
       <div class="flex items-center justify-between">
         <span class="font-bold text-on-surface text-lg">${t.id}</span>
         <span class="${cls} text-xs font-semibold px-2 py-0.5 rounded-full">${lbl}</span>
       </div>
       <div class="flex items-center gap-1 text-xs text-on-surface-variant"><span class="material-symbols-outlined text-[14px]">group</span>${t.cap} chỗ</div>
-      ${t.status!=='empty'?`
+      ${inactive?`<div class="text-xs text-on-surface-variant">Bàn tạm khoá</div>`:t.status!=='empty'?`
         <div class="flex justify-between text-xs">
           <span class="text-on-surface-variant flex items-center gap-0.5"><span class="material-symbols-outlined text-[13px]">schedule</span>${t.mins}ph</span>
           <span class="font-bold text-primary">${fmt(t.spent)}</span>
@@ -1053,6 +1088,8 @@ function refreshCashierTables(zone='all'){
       `:`<div class="text-xs text-on-surface-variant">Trống</div>`}
     </div>`;
   }).join('');
+  // Gắn context menu (right-click / long-press) - chỉ làm 1 lần
+  attachTableMenu(grid);
 }
 
 async function cashierZone(zone,btn){
