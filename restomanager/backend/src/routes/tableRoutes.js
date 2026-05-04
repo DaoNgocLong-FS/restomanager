@@ -7,7 +7,7 @@ const { validateBody } = require('../middleware/validate');
 // Đọc: yêu cầu auth (đảm bảo không lộ trạng thái bàn cho người ngoài)
 router.get('/', requireAuth, ctrl.list);
 
-// Ghi: chỉ admin
+// Quản trị: chỉ admin
 router.post  ('/',
   requireAuth, requireRole('admin'),
   validateBody({
@@ -19,5 +19,9 @@ router.post  ('/',
 );
 router.put   ('/:id', requireAuth, requireRole('admin'), ctrl.update);
 router.delete('/:id', requireAuth, requireRole('admin'), ctrl.remove);
+
+// Bật/tắt bàn + dọn bàn: admin + cashier
+router.patch ('/:id/active', requireAuth, requireRole('admin', 'cashier'), ctrl.setActive);
+router.post  ('/:id/clear',  requireAuth, requireRole('admin', 'cashier'), ctrl.clearTable);
 
 module.exports = router;

@@ -40,6 +40,17 @@ class TableModel {
     return db.queryOne('SELECT * FROM tables WHERE code = $1', [code]);
   }
 
+  /** Trả về order đang mở (pending/serving) trên bàn này, hoặc null. */
+  static async findOpenOrder(tableId) {
+    return db.queryOne(
+      `SELECT id, code, status, total_amount, table_code
+       FROM orders
+       WHERE table_id = $1 AND status IN ('pending','serving')
+       ORDER BY created_at DESC LIMIT 1`,
+      [tableId]
+    );
+  }
+
   static async create({ code, zone, capacity }) {
     return db.queryOne(
       `INSERT INTO tables (code, zone, capacity) VALUES ($1,$2,$3) RETURNING *`,
@@ -57,6 +68,27 @@ class TableModel {
        WHERE id = $5 RETURNING *`,
       [code, zone, capacity, is_active, id]
     );
+  }
+
+  /**
+   * Bật/tắt 1 bàn (is_active).
+   * Khi tắt: bàn KHÔNG được có order đang mở.
+   * Trả về { table, openOrder } - openOrder !== null nghĩa là blocked.
+   */
+  static async setActive(id, is_active) {
+    const t = await this.findById(id);
+    if (!t) return { table: null, openOrder: null };
+
+    if (is_active === false) {
+      const openOrder = await this.findOpenOrder(id);
+      if (openOrder) return { table: t, openOrder };
+    }
+
+    const updated = await db.queryOne(
+      `UPDATE tables SET is_active = $1 WHERE id = $2 RETURNING *`,
+      [is_active, id]
+    );
+    return { table: updated, openOrder: null };
   }
 
   static async remove(id) {

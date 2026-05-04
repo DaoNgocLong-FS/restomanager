@@ -16,6 +16,9 @@ router.put   ('/:id/status',      requireRole('waiter', 'cashier', 'admin'), ctr
 router.delete('/:id',             requireRole('waiter', 'cashier', 'admin'), ctrl.cancelOrder);
 router.post  ('/:id/checkout',    requireRole('cashier', 'admin'),           ctrl.checkout);
 
+// ─── Move order to another table (admin + cashier) ───
+router.post  ('/:id/move',        requireRole('cashier', 'admin'),           ctrl.moveOrder);
+
 // ─── Write order items (cashier cũng được sửa) ───
 router.post  ('/:id/items',                requireRole('waiter', 'cashier', 'admin'), ctrl.addItems);
 router.put   ('/:id/items/:itemId',        requireRole('waiter', 'cashier', 'admin'), ctrl.updateItem);

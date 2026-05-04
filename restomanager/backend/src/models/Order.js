@@ -15,6 +15,8 @@ class OrderModel {
       resolvedTable = await db.queryOne('SELECT * FROM tables WHERE code = $1', [table_code]);
     }
     if (!resolvedTable) throw new Error('Bàn không tồn tại');
+    if (resolvedTable.is_active === false)
+      throw new Error(`Bàn ${resolvedTable.code} đang tạm khoá, không thể tạo order`);
 
     // Check for existing open order
     const existing = await db.queryOne(
@@ -115,15 +117,22 @@ class OrderModel {
     return this._attachItems(upd);
   }
 
-  static async cancel(id) {
+  /**
+   * Huỷ order. Tuỳ chọn truyền reason (vd. 'CLEAR_TABLE' khi dọn bàn,
+   * 'CUSTOMER_LEFT' khi khách bỏ về, ...).
+   */
+  static async cancel(id, reason = null) {
     const order = await this.findById(id);
     if (!order) return null;
     if (order.status === 'completed') throw new Error('Không thể hủy order đã completed');
     if (order.status === 'cancelled') throw new Error('Order đã bị hủy');
     const upd = await db.queryOne(
-      `UPDATE orders SET status = 'cancelled', updated_at = NOW()
+      `UPDATE orders
+       SET status = 'cancelled',
+           cancelled_reason = $2,
+           updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [id]
+      [id, reason]
     );
     return this._attachItems(upd);
   }
@@ -158,10 +167,6 @@ class OrderModel {
     return db.query('SELECT * FROM order_items WHERE order_id = $1 ORDER BY created_at', [orderId]);
   }
 
-  /**
-   * Cập nhật một order_item (đổi quantity hoặc notes).
-   * Tự động tính lại total_price của item và total_amount của order.
-   */
   static async updateItem(orderId, itemId, { quantity, notes }) {
     const order = await db.queryOne('SELECT * FROM orders WHERE id = $1', [orderId]);
     if (!order) throw new Error('Order không tồn tại');
@@ -197,10 +202,6 @@ class OrderModel {
     }).then(o => this._attachItems(o));
   }
 
-  /**
-   * Xoá một order_item. Tự cập nhật lại total_amount của order.
-   * Nếu là item cuối cùng → vẫn giữ order rỗng (không tự huỷ) để cashier quyết định.
-   */
   static async removeItem(orderId, itemId) {
     const order = await db.queryOne('SELECT * FROM orders WHERE id = $1', [orderId]);
     if (!order) throw new Error('Order không tồn tại');
@@ -222,6 +223,49 @@ class OrderModel {
       const updated = await client.query('SELECT * FROM orders WHERE id = $1', [orderId]);
       return updated.rows[0];
     }).then(o => this._attachItems(o));
+  }
+
+  /**
+   * Chuyển order sang bàn khác.
+   * - Order phải đang mở (pending/serving)
+   * - Bàn đích phải tồn tại, đang active, và KHÔNG có order mở nào khác
+   * - Trả về { order, fromTableCode, toTableCode } để controller broadcast realtime
+   */
+  static async moveToTable(orderId, toTableId) {
+    const order = await db.queryOne('SELECT * FROM orders WHERE id = $1', [orderId]);
+    if (!order) throw new Error('Order không tồn tại');
+    if (!['pending', 'serving'].includes(order.status))
+      throw new Error('Order đã đóng, không thể chuyển bàn');
+
+    const toTable = await db.queryOne('SELECT * FROM tables WHERE id = $1', [toTableId]);
+    if (!toTable) throw new Error('Bàn đích không tồn tại');
+    if (toTable.is_active === false)
+      throw new Error(`Bàn ${toTable.code} đang tạm khoá, không thể chuyển vào`);
+
+    if (toTable.id === order.table_id)
+      throw new Error('Order đã ở bàn này rồi');
+
+    // Bàn đích phải trống (không có order mở)
+    const occupied = await db.queryOne(
+      `SELECT id, code FROM orders o
+       JOIN tables t ON t.id = o.table_id
+       WHERE o.table_id = $1 AND o.status IN ('pending','serving') LIMIT 1`,
+      [toTableId]
+    );
+    if (occupied)
+      throw new Error(`Bàn ${toTable.code} đang có order mở, vui lòng chọn bàn khác`);
+
+    const fromTableCode = order.table_code;
+
+    const updated = await db.queryOne(
+      `UPDATE orders
+       SET table_id = $1, table_code = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [toTable.id, toTable.code, orderId]
+    );
+
+    const full = await this._attachItems(updated);
+    return { order: full, fromTableCode, toTableCode: toTable.code };
   }
 
   static async _attachItems(order) {

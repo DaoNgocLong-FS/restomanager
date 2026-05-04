@@ -1,4 +1,5 @@
 const OrderModel    = require('../models/Order');
+const TableModel    = require('../models/Table');
 const InvoiceModel  = require('../models/Invoice');
 const LogModel      = require('../models/Log');
 const realtime      = require('../realtime/io');
@@ -61,26 +62,34 @@ exports.createOrder = asyncHandler(async (req, res) => {
   const errs = validateCreateOrder(req.body || {});
   if (errs.length) throw ApiError.validation('Dữ liệu không hợp lệ', errs);
 
-  const order = await OrderModel.create({
-    table_id:    req.body.table_id   || null,
-    table_code:  req.body.table_code || null,
-    waiter_id:   req.user && req.user.id ? req.user.id : null,
-    waiter_name: String(req.body.waiter_name).trim(),
-    items: req.body.items.map(i => ({
-      menu_item_id: i.menu_item_id || null,
-      item_name:    String(i.item_name).trim(),
-      quantity:     parseInt(i.quantity),
-      price:        parseFloat(i.price),
-      notes:        i.notes || null,
-    })),
-    notes: req.body.notes || null,
-  });
+  let order;
+  try {
+    order = await OrderModel.create({
+      table_id:    req.body.table_id   || null,
+      table_code:  req.body.table_code || null,
+      waiter_id:   req.user && req.user.id ? req.user.id : null,
+      waiter_name: String(req.body.waiter_name).trim(),
+      items: req.body.items.map(i => ({
+        menu_item_id: i.menu_item_id || null,
+        item_name:    String(i.item_name).trim(),
+        quantity:     parseInt(i.quantity),
+        price:        parseFloat(i.price),
+        notes:        i.notes || null,
+      })),
+      notes: req.body.notes || null,
+    });
+  } catch (err) {
+    // Race condition: 2 request đồng thời, partial unique index sẽ trả 23505
+    if (err.code === '23505')
+      throw ApiError.conflict('Bàn này đang có order mở, không thể tạo mới');
+    throw ApiError.badRequest(err.message);
+  }
+
   LogModel.write({
     user_id: req.user && req.user.id, user_name: req.user && req.user.full_name,
     action: 'CREATE_ORDER', entity: 'ORDER', entity_id: order.id,
     details: { table: order.table_code, total: order.total_amount },
   }).catch(() => {});
-  // Realtime
   realtime.emit('order:created', { order: _orderSummary(order) });
   realtime.broadcastOrdersChanged({ reason: 'created', order_id: order.id });
   realtime.broadcastTablesChanged({ reason: 'order_created', table_code: order.table_code });
@@ -121,13 +130,14 @@ exports.updateOrderStatus = asyncHandler(async (req, res) => {
 });
 
 exports.cancelOrder = asyncHandler(async (req, res) => {
-  const o = await OrderModel.cancel(req.params.id);
+  const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : null;
+  const o = await OrderModel.cancel(req.params.id, reason);
   if (!o) throw ApiError.notFound('Order không tồn tại');
   LogModel.write({
     user_id: req.user && req.user.id, user_name: req.user && req.user.full_name,
-    action: 'CANCEL_ORDER', entity: 'ORDER', entity_id: o.id,
+    action: 'CANCEL_ORDER', entity: 'ORDER', entity_id: o.id, details: { reason },
   }).catch(() => {});
-  realtime.emit('order:cancelled', { order: _orderSummary(o) });
+  realtime.emit('order:cancelled', { order: _orderSummary(o), reason });
   realtime.broadcastOrdersChanged({ reason: 'cancelled', order_id: o.id });
   realtime.broadcastTablesChanged({ reason: 'order_cancelled', table_code: o.table_code });
   return ok(res, o, { message: 'Hủy order thành công' });
@@ -236,4 +246,46 @@ exports.checkout = asyncHandler(async (req, res) => {
   realtime.broadcastOrdersChanged({ reason: 'checkout', order_id: req.params.id });
   realtime.broadcastTablesChanged({ reason: 'checkout', table_code: inv.table_code });
   return created(res, inv, 'Thanh toán thành công');
+});
+
+/**
+ * POST /api/orders/:id/move
+ * Body: { to_table_id }
+ * Chuyển order đang mở sang bàn khác. Bàn đích phải trống & đang active.
+ */
+exports.moveOrder = asyncHandler(async (req, res) => {
+  const { to_table_id } = req.body || {};
+  if (!to_table_id)
+    throw ApiError.validation('Dữ liệu không hợp lệ', ['to_table_id: bắt buộc']);
+
+  let result;
+  try {
+    result = await OrderModel.moveToTable(req.params.id, to_table_id);
+  } catch (err) {
+    if (err.code === '23505')
+      throw ApiError.conflict('Bàn đích đang có order mở, vui lòng chọn bàn khác');
+    if (String(err.message).includes('không tồn tại')) throw ApiError.notFound(err.message);
+    if (String(err.message).includes('đang có order mở')) throw ApiError.conflict(err.message);
+    throw ApiError.badRequest(err.message);
+  }
+
+  const { order, fromTableCode, toTableCode } = result;
+
+  LogModel.write({
+    user_id: req.user && req.user.id, user_name: req.user && req.user.full_name,
+    action: 'MOVE_ORDER', entity: 'ORDER', entity_id: order.id,
+    details: { from: fromTableCode, to: toTableCode },
+  }).catch(() => {});
+
+  realtime.emit('order:moved', {
+    order: _orderSummary(order),
+    from_table_code: fromTableCode,
+    to_table_code:   toTableCode,
+  });
+  realtime.broadcastOrdersChanged({ reason: 'moved', order_id: order.id });
+  // 2 bàn đều đổi trạng thái → broadcast 2 lần để FE refresh đúng
+  realtime.broadcastTablesChanged({ reason: 'order_moved_out', table_code: fromTableCode });
+  realtime.broadcastTablesChanged({ reason: 'order_moved_in',  table_code: toTableCode });
+
+  return ok(res, order, { message: `Đã chuyển order từ bàn ${fromTableCode} sang ${toTableCode}` });
 });
