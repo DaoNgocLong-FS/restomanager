@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AuthProvider, useAuth } from './src/AuthContext';
+import { ConfirmProvider, ConfirmBridge, ToastHost } from './src/components/Notify';
 import { colors } from './src/theme';
 
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -84,11 +85,18 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content"/>
-      <AuthProvider>
-        <NavigationContainer>
-          <RootNav/>
-        </NavigationContainer>
-      </AuthProvider>
+      <ConfirmProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <RootNav/>
+          </NavigationContainer>
+          {/* ConfirmBridge phải nằm trong ConfirmProvider để hook hợp lệ;
+              cho phép gọi confirm() từ bất kỳ đâu kể cả ngoài component */}
+          <ConfirmBridge />
+          {/* ToastHost render ở root để toast hiện trên mọi màn hình */}
+          <ToastHost />
+        </AuthProvider>
+      </ConfirmProvider>
     </SafeAreaProvider>
   );
 }

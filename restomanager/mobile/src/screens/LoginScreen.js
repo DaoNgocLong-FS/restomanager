@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { colors } from '../theme';
+import { toast } from '../components/Notify';
 
 export default function LoginScreen({ navigation }) {
   const { login, apiBase } = useAuth();
@@ -13,14 +15,14 @@ export default function LoginScreen({ navigation }) {
 
   const submit = async () => {
     if (!apiBase) {
-      Alert.alert('Chưa cấu hình', 'Vào Cài đặt để nhập URL server.');
+      toast.info('Chưa cấu hình', 'Vào Cài đặt để nhập URL server.');
       return;
     }
     setBusy(true); setErr('');
     try {
       const me = await login(u.trim(), p);
       if (me.role === 'admin') {
-        Alert.alert('Lưu ý', 'Tài khoản admin nên dùng phiên bản web. App này dành cho waiter / cashier.');
+        toast.info('Tài khoản admin', 'Nên dùng phiên bản web. App này tối ưu cho waiter / cashier.');
       }
     } catch (e) {
       setErr(e.message || 'Đăng nhập thất bại');
@@ -30,38 +32,40 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView style={s.flex} behavior={Platform.OS==='ios'?'padding':undefined}>
-      <View style={s.wrap}>
-        <View style={s.brand}>
-          <View style={s.logo}><Ionicons name="restaurant" size={32} color="#fff" /></View>
-          <Text style={s.appname}>RestoManager</Text>
-          <Text style={s.tag}>Hệ thống quản lý nhà hàng</Text>
+    <SafeAreaView edges={['top','bottom']} style={s.flex}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.wrap}>
+          <View style={s.brand}>
+            <View style={s.logo}><Ionicons name="restaurant" size={32} color="#fff" /></View>
+            <Text style={s.appname}>RestoManager</Text>
+            <Text style={s.tag}>Hệ thống quản lý nhà hàng</Text>
+          </View>
+
+          <View style={s.card}>
+            <Text style={s.title}>Đăng nhập</Text>
+
+            <Text style={s.label}>Tên đăng nhập</Text>
+            <TextInput value={u} onChangeText={setU} placeholder="waiter / cashier"
+              autoCapitalize="none" autoCorrect={false} style={s.input}/>
+
+            <Text style={s.label}>Mật khẩu</Text>
+            <TextInput value={p} onChangeText={setP} placeholder="••••" secureTextEntry style={s.input}/>
+
+            {!!err && <Text style={s.err}>{err}</Text>}
+
+            <TouchableOpacity style={[s.btn, busy && {opacity:0.6}]} disabled={busy} onPress={submit}>
+              {busy ? <ActivityIndicator color="#fff" />
+                : (<><Ionicons name="log-in-outline" size={18} color="#fff" /><Text style={s.btnText}>Đăng nhập</Text></>)}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={s.settingsLink}>
+              <Ionicons name="settings-outline" size={14} color={colors.muted} />
+              <Text style={s.settingsTxt}>{apiBase ? 'Cài đặt server' : 'Cấu hình server (chưa thiết lập)'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-
-        <View style={s.card}>
-          <Text style={s.title}>Đăng nhập</Text>
-
-          <Text style={s.label}>Tên đăng nhập</Text>
-          <TextInput value={u} onChangeText={setU} placeholder="waiter / cashier"
-            autoCapitalize="none" autoCorrect={false} style={s.input}/>
-
-          <Text style={s.label}>Mật khẩu</Text>
-          <TextInput value={p} onChangeText={setP} placeholder="••••" secureTextEntry style={s.input}/>
-
-          {!!err && <Text style={s.err}>{err}</Text>}
-
-          <TouchableOpacity style={[s.btn, busy && {opacity:0.6}]} disabled={busy} onPress={submit}>
-            {busy ? <ActivityIndicator color="#fff" />
-              : (<><Ionicons name="log-in-outline" size={18} color="#fff" /><Text style={s.btnText}>Đăng nhập</Text></>)}
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={s.settingsLink}>
-            <Ionicons name="settings-outline" size={14} color={colors.muted} />
-            <Text style={s.settingsTxt}>{apiBase ? 'Cài đặt server' : 'Cấu hình server (chưa thiết lập)'}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

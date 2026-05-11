@@ -3,6 +3,7 @@
 // - Cashier: xem tất cả đơn (paid + pending)
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
@@ -52,7 +53,7 @@ export default function OrdersScreen() {
   const data = showOpen ? orders : invoices;
 
   return (
-    <View style={s.wrap}>
+    <SafeAreaView edges={['top']} style={s.wrap}>
       <View style={s.head}>
         <Text style={s.title}>{user?.role === 'waiter' ? 'Đơn của tôi' : 'Đơn hàng'}</Text>
       </View>
@@ -77,7 +78,7 @@ export default function OrdersScreen() {
           showOpen ? <OrderCard o={o}/> : <InvoiceCard inv={o}/>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

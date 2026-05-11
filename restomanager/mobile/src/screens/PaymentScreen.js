@@ -1,10 +1,12 @@
 // Cashier thanh toán: 6 phương thức + keypad + tiền thừa + receipt modal
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
 import { useAuth } from '../AuthContext';
 import { colors, fmt, PAY_METHODS, PAY_LABELS } from '../theme';
+import { toast } from '../components/Notify';
 
 export default function PaymentScreen({ route, navigation }) {
   const { order, table, sub, vat, total } = route.params || {};
@@ -25,8 +27,9 @@ export default function PaymentScreen({ route, navigation }) {
     else setPaid(p => (p === '0' ? k : p + k));
   };
 
-  const confirm = async () => {
-    if (paidNum < total) { Alert.alert('Không đủ', 'Khách trả chưa đủ.'); return; }
+  // Đổi tên: 'confirm' đụng với hook useConfirm bên kia, đặt lại là 'doCheckout'
+  const doCheckout = async () => {
+    if (paidNum < total) { toast.info('Khách trả chưa đủ', `Còn thiếu ${fmt(total - paidNum)}`); return; }
     setBusy(true);
     try {
       const inv = await Api.checkout(order.id, {
@@ -37,8 +40,9 @@ export default function PaymentScreen({ route, navigation }) {
         paid_amount: paidNum,
       });
       setInvoice(inv);
+      toast.ok('Thanh toán thành công', `Hoá đơn ${inv?.code || ''}`);
     } catch (e) {
-      Alert.alert('Thất bại', e.message);
+      toast.err('Thanh toán thất bại', e.message);
     } finally { setBusy(false); }
   };
 
@@ -48,7 +52,7 @@ export default function PaymentScreen({ route, navigation }) {
   };
 
   return (
-    <View style={s.wrap}>
+    <SafeAreaView edges={['bottom']} style={s.wrap}>
       <ScrollView contentContainerStyle={{ padding:16, paddingBottom:32 }}>
         {/* Bill summary */}
         <View style={s.card}>
@@ -115,7 +119,7 @@ export default function PaymentScreen({ route, navigation }) {
           </View>
         </View>
 
-        <TouchableOpacity style={[s.confirmBtn, busy && {opacity:0.6}]} disabled={busy} onPress={confirm}>
+        <TouchableOpacity style={[s.confirmBtn, busy && {opacity:0.6}]} disabled={busy} onPress={doCheckout}>
           <Ionicons name="checkmark-circle" size={20} color="#fff"/>
           <Text style={s.confirmTxt}>{busy ? 'Đang xử lý…' : 'Xác nhận thanh toán'}</Text>
         </TouchableOpacity>
@@ -165,7 +169,7 @@ export default function PaymentScreen({ route, navigation }) {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

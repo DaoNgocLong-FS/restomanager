@@ -1,16 +1,19 @@
 // Cashier xem chi tiết bàn, sửa món, đi tới thanh toán.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
 import { useRealtime } from '../socket';
 import { colors, fmt } from '../theme';
+import { toast, useConfirm } from '../components/Notify';
 
 export default function DetailScreen({ route, navigation }) {
   const table = route.params?.table;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     if (!table?.id) return;
@@ -19,7 +22,7 @@ export default function DetailScreen({ route, navigation }) {
       const o = await Api.getOpenOrderForTable(table.id);
       setOrder(o);
     } catch (e) {
-      Alert.alert('Lỗi', e.message);
+      toast.err('Lỗi tải đơn', e.message);
     } finally { setLoading(false); }
   }, [table?.id]);
 
@@ -50,27 +53,30 @@ export default function DetailScreen({ route, navigation }) {
 
   const inc = async (it) => {
     try { await Api.updateOrderItem(order.id, it.id, { quantity: it.quantity+1 }); load(); }
-    catch(e){ Alert.alert('Lỗi', e.message); }
+    catch(e){ toast.err('Không thể tăng số lượng', e.message); }
   };
   const dec = async (it) => {
     try {
       if (it.quantity <= 1) await Api.removeOrderItem(order.id, it.id);
       else await Api.updateOrderItem(order.id, it.id, { quantity: it.quantity-1 });
       load();
-    } catch(e){ Alert.alert('Lỗi', e.message); }
+    } catch(e){ toast.err('Không thể giảm số lượng', e.message); }
   };
-  const del = (it) => {
-    Alert.alert('Xác nhận', `Xoá "${it.item_name}" khỏi đơn?`, [
-      { text:'Huỷ', style:'cancel' },
-      { text:'Xoá', style:'destructive', onPress: async () => {
-        try { await Api.removeOrderItem(order.id, it.id); load(); }
-        catch(e){ Alert.alert('Lỗi', e.message); }
-      }}
-    ]);
+  const del = async (it) => {
+    const ok = await confirm({
+      title: `Xoá "${it.item_name}"?`,
+      message: 'Món sẽ được gỡ khỏi đơn.',
+      okText: 'Xoá',
+      cancelText: 'Huỷ',
+      danger: true,
+    });
+    if (!ok) return;
+    try { await Api.removeOrderItem(order.id, it.id); load(); toast.ok('Đã xoá món'); }
+    catch(e){ toast.err('Không thể xoá', e.message); }
   };
 
   return (
-    <View style={s.wrap}>
+    <SafeAreaView edges={['bottom']} style={s.wrap}>
       <ScrollView contentContainerStyle={{ padding:16, paddingBottom:240 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[colors.primary]} />}>
         <View style={s.head}>
@@ -147,7 +153,7 @@ export default function DetailScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

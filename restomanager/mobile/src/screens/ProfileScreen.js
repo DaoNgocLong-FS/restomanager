@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { Api, getApiBase } from '../api';
 import { colors, fmt, PAY_LABELS } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { useConfirm, toast } from '../components/Notify';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout } = useAuth();
   const [stats, setStats] = useState(null);
+  const confirm = useConfirm();
 
   useFocusEffect(React.useCallback(() => {
     if (user?.role === 'cashier' || user?.role === 'admin') {
@@ -16,55 +19,63 @@ export default function ProfileScreen({ navigation }) {
     }
   }, [user]));
 
-  const doLogout = () => {
-    Alert.alert('Xác nhận', 'Đăng xuất khỏi ứng dụng?', [
-      { text:'Huỷ', style:'cancel' },
-      { text:'Đăng xuất', style:'destructive', onPress: async () => { await logout(); } },
-    ]);
+  const doLogout = async () => {
+    const ok = await confirm({
+      title: 'Đăng xuất?',
+      message: 'Bạn cần đăng nhập lại để dùng tiếp.',
+      okText: 'Đăng xuất',
+      cancelText: 'Huỷ',
+      danger: true,
+    });
+    if (!ok) return;
+    await logout();
+    toast.ok('Đã đăng xuất');
   };
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding:16 }}>
-      <View style={s.profileCard}>
-        <View style={s.avatar}>
-          <Text style={s.avatarTxt}>{(user?.full_name || user?.username || 'U').charAt(0).toUpperCase()}</Text>
-        </View>
-        <Text style={s.name}>{user?.full_name || user?.username}</Text>
-        <Text style={s.role}>{user?.role}</Text>
-      </View>
-
-      {stats && (
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Hôm nay</Text>
-          <View style={s.kpiRow}>
-            <KPI icon="cash-outline" label="Doanh thu" value={fmt(stats.summary?.total_revenue)} />
-            <KPI icon="receipt-outline" label="Hoá đơn" value={String(stats.summary?.invoice_count || 0)} />
+    <SafeAreaView edges={['top']} style={s.wrap}>
+      <ScrollView contentContainerStyle={{ padding:16 }}>
+        <View style={s.profileCard}>
+          <View style={s.avatar}>
+            <Text style={s.avatarTxt}>{(user?.full_name || user?.username || 'U').charAt(0).toUpperCase()}</Text>
           </View>
-          {stats.byPaymentMethod && stats.byPaymentMethod.length > 0 && (
-            <View style={s.pmCard}>
-              <Text style={s.pmTitle}>Phương thức TT</Text>
-              {stats.byPaymentMethod.map(p => (
-                <View key={p.payment_method} style={s.pmRow}>
-                  <Text style={{ color: colors.muted }}>{PAY_LABELS[p.payment_method] || p.payment_method}</Text>
-                  <Text style={{ fontWeight:'600' }}>{p.count} HĐ · {fmt(p.revenue)}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          <Text style={s.name}>{user?.full_name || user?.username}</Text>
+          <Text style={s.role}>{user?.role}</Text>
         </View>
-      )}
 
-      <View style={s.section}>
-        <Text style={s.sectionTitle}>Cài đặt</Text>
-        <Item icon="server-outline" label="Server" value={getApiBase() || '–'} onPress={() => navigation.navigate('Settings')} />
-        <Item icon="information-circle-outline" label="Phiên bản" value="1.0.0" />
-      </View>
+        {stats && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Hôm nay</Text>
+            <View style={s.kpiRow}>
+              <KPI icon="cash-outline" label="Doanh thu" value={fmt(stats.summary?.total_revenue)} />
+              <KPI icon="receipt-outline" label="Hoá đơn" value={String(stats.summary?.invoice_count || 0)} />
+            </View>
+            {stats.byPaymentMethod && stats.byPaymentMethod.length > 0 && (
+              <View style={s.pmCard}>
+                <Text style={s.pmTitle}>Phương thức TT</Text>
+                {stats.byPaymentMethod.map(p => (
+                  <View key={p.payment_method} style={s.pmRow}>
+                    <Text style={{ color: colors.muted }}>{PAY_LABELS[p.payment_method] || p.payment_method}</Text>
+                    <Text style={{ fontWeight:'600' }}>{p.count} HĐ · {fmt(p.revenue)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
-      <TouchableOpacity style={s.logoutBtn} onPress={doLogout}>
-        <Ionicons name="log-out-outline" size={18} color={colors.error}/>
-        <Text style={s.logoutTxt}>Đăng xuất</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Cài đặt</Text>
+          <Item icon="server-outline" label="Server" value={getApiBase() || '–'} onPress={() => navigation.navigate('Settings')} />
+          <Item icon="information-circle-outline" label="Phiên bản" value="1.0.0" />
+        </View>
+
+        <TouchableOpacity style={s.logoutBtn} onPress={doLogout}>
+          <Ionicons name="log-out-outline" size={18} color={colors.error}/>
+          <Text style={s.logoutTxt}>Đăng xuất</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

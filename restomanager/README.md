@@ -2,15 +2,24 @@
 
 Một ứng dụng web hoàn chỉnh gồm hai vai trò chính:
 
-* **POS** (`pos.html`) – dành cho **nhân viên phục vụ** (gọi món, thêm món vào bàn) và **thu ngân** (xem đơn, lập hoá đơn, thanh toán).
-* **Admin** (`admin.html`) – dành cho **quản trị viên**: dashboard, nhân viên, thực đơn, bàn, hoá đơn, nhật ký hệ thống.
+* **POS** (React app, `frontend-react/`) – dành cho **nhân viên phục vụ** (gọi món, thêm món vào bàn) và **thu ngân** (xem đơn, lập hoá đơn, thanh toán). Đã migrate từ vanilla sang React 18 (xem `frontend-react/README.md`).
+* **Admin** (`admin.html`) – dành cho **quản trị viên**: dashboard, nhân viên, thực đơn, bàn, hoá đơn, nhật ký hệ thống. *Vẫn đang là vanilla, sẽ migrate ở sprint tiếp.*
 
 Stack:
 
 * **Backend**: Node.js 20 + Express 4 + **Socket.IO 4** + PostgreSQL 16 + MinIO (S3-compatible) + JWT
-* **Frontend**: HTML + Tailwind (CDN) + Vanilla JS + **socket.io-client** (CDN), phục vụ qua **Nginx** (đã proxy `/socket.io`)
-* **Mobile**: Expo / React Native + **socket.io-client**
+* **Frontend (POS)**: **React 18 + Vite 5 + Tailwind 3 + react-router-dom 6 + lucide-react** — phục vụ static (đã build) qua Nginx
+* **Frontend (Admin)**: HTML + Tailwind (CDN) + Vanilla JS — phục vụ qua cùng Nginx tại `/admin.html`
+* **Mobile**: Expo / React Native + **react-native-safe-area-context** + custom Toast/ConfirmDialog (không dùng `Alert.alert`)
 * **Triển khai**: Docker Compose (5 services: `postgres`, `minio`, `minio-init`, `backend`, `frontend`)
+  Service `frontend` dùng **multi-stage build**: stage 1 chạy `npm build` cho React, stage 2 nginx phục vụ.
+
+> 📋 Đã hoàn thành **3 yêu cầu của giảng viên** (sprint T2/2026):
+> 1. ✅ Web migrate sang React.js — xem `frontend-react/`
+> 2. ✅ Mobile dùng SafeAreaView của Expo (8/8 screens)
+> 3. ✅ Mobile bỏ Alert, dùng Toast + ConfirmDialog tự xây
+>
+> Chi tiết: xem `CHANGELOG_FEEDBACK.md`
 
 ---
 
@@ -36,8 +45,8 @@ Sau khi tất cả service đã sẵn sàng, mở trình duyệt:
 
 | Dịch vụ                  | URL                              |
 | ------------------------ | -------------------------------- |
-| Trang POS / Đăng nhập    | http://localhost:8080/pos.html   |
-| Trang Admin              | http://localhost:8080/admin.html |
+| Trang POS (React)        | http://localhost:8080/           |
+| Trang Admin (vanilla)    | http://localhost:8080/admin.html |
 | API REST                 | http://localhost:3000/api        |
 | MinIO Console (S3 UI)    | http://localhost:9001            |
 | MinIO API (object store) | http://localhost:9000            |
@@ -76,15 +85,25 @@ restomanager/
 │       ├── models/     (User, MenuItem, Table, Order, Invoice, Log)
 │       ├── controllers/
 │       └── routes/
-├── frontend/
-│   ├── Dockerfile
+├── frontend/                       # Static legacy + nginx config
+│   ├── Dockerfile                  # Multi-stage: build React + nginx
 │   ├── nginx.conf
-│   ├── index.html      (router)
-│   ├── pos.html        (POS – waiter / cashier)
-│   ├── admin.html      (Admin)
-│   └── js/api.js       (API client dùng chung)
-└── mobile/             (Expo / React Native — xem mobile/README.md)
-    ├── App.js
+│   ├── admin.html                  # Vanilla admin (chưa migrate)
+│   └── js/api.js                   # API client cho admin.html
+├── frontend-react/                 # ⭐ POS app — React + Vite + Tailwind
+│   ├── package.json
+│   ├── vite.config.js              # proxy /api & /socket.io khi dev
+│   ├── tailwind.config.js
+│   ├── README.md                   # Chi tiết cấu trúc / cách chạy
+│   └── src/
+│       ├── App.jsx, main.jsx
+│       ├── api/client.js           # Port từ frontend/js/api.js cũ
+│       ├── auth/                   # AuthContext + LoginPage
+│       ├── components/             # Toast, Confirm, AppShell, TableContextMenu
+│       ├── hooks/useSocket.js
+│       └── pages/                  # CashierTables, CashierDetail, WaiterMenu, …
+└── mobile/                         (Expo / React Native — xem mobile/README.md)
+    ├── App.js                      # Đã wire ConfirmProvider + ToastHost + SafeAreaProvider
     ├── package.json
     ├── app.json
     └── src/
@@ -129,7 +148,7 @@ cần bấm Refresh hay polling.
 
 ### Kiểm thử nhanh
 
-* Mở 2 tab cùng lúc: `pos.html` (đăng nhập **waiter**) và `pos.html` (đăng nhập **cashier**).
+* Mở 2 tab cùng lúc: http://localhost:8080/ (đăng nhập **waiter**) và http://localhost:8080/ (đăng nhập **cashier**).
 * Waiter gọi món → tab cashier sẽ thấy bàn chuyển sang "Có khách / Đơn mới" ngay lập tức.
 * Cashier thanh toán → bàn về "Trống" và dashboard admin (nếu mở) cũng cập nhật.
 
@@ -217,11 +236,13 @@ cp .env.example .env       # rồi chỉnh DB_HOST=localhost, MINIO_ENDPOINT=loc
 npm install
 npm start                  # cổng 3000
 
-# Frontend
-# Cách đơn giản nhất là phục vụ thư mục frontend qua một static server:
-cd ../frontend
-npx serve -l 5173
-# Mở http://localhost:5173/pos.html  – api client sẽ gọi http://localhost:3000/api
+# Frontend (React)
+cd ../frontend-react
+npm install
+npm run dev                 # cổng 5173 — proxy /api và /socket.io đã bật sẵn
+# Mở http://localhost:5173/  → React app (login → POS)
+# Trang admin (vanilla) chỉ chạy được khi build bằng Docker (multi-stage)
+# hoặc bạn copy frontend/admin.html + frontend/js/api.js vào nginx của bạn.
 ```
 
 ---

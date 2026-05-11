@@ -7,6 +7,7 @@
 //   - waiter        → bỏ qua (không có quyền)
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
@@ -113,7 +114,7 @@ export default function TablesScreen({ navigation }) {
   };
 
   return (
-    <View style={s.wrap}>
+    <SafeAreaView edges={['top']} style={s.wrap}>
       <View style={s.header}>
         <Text style={s.title}>{user?.role === 'waiter' ? 'Bàn của tôi' : 'Sơ đồ bàn'}</Text>
         <Text style={s.subtitle}>{user?.full_name || user?.username}</Text>
@@ -150,7 +151,7 @@ export default function TablesScreen({ navigation }) {
         onClose={() => setSheetTable(null)}
         onChanged={load}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

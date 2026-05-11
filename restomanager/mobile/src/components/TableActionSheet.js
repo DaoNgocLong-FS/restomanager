@@ -1,17 +1,18 @@
 // =============================================================================
-//  TableActionSheet
-//  - Modal bottom sheet hiển thị khi long-press 1 thẻ bàn
-//  - Gồm các action: chuyển bàn, dọn bàn, bật/tắt bàn (tuỳ trạng thái + role)
-//  - Disable phù hợp khi action không hợp lệ
+//  TableActionSheet — bottom sheet hiển thị khi long-press 1 thẻ bàn
+//  - Action: chuyển bàn / dọn bàn / bật-tắt bàn (tuỳ trạng thái + role)
+//  - KHÔNG dùng Alert.alert nữa: thay bằng toast + ConfirmDialog tự xây
+//    để đồng bộ với phần còn lại của app và có UI/UX tốt hơn
 // =============================================================================
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, Modal, Pressable, StyleSheet, FlatList,
-  Animated, Easing, ActivityIndicator, Alert,
+  Animated, Easing, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
 import { colors, fmt } from '../theme';
+import { toast, useConfirm } from './Notify';
 
 const ROLES_ALLOWED = new Set(['admin', 'cashier']);
 
@@ -19,23 +20,25 @@ const ROLES_ALLOWED = new Set(['admin', 'cashier']);
  * Props:
  *  - visible: boolean
  *  - table:   { id, code, status, is_active, open_order_id, ... }
- *  - role:    string ('admin' | 'cashier' | ...)
- *  - onClose: () => void
- *  - onChanged: () => void   // gọi khi có thay đổi để parent reload
+ *  - role:    'admin' | 'cashier' | ...
+ *  - onClose, onChanged
  */
 export default function TableActionSheet({ visible, table, role, onClose, onChanged }) {
-  const [phase, setPhase] = useState('menu'); // 'menu' | 'move' | 'busy'
+  const confirm = useConfirm();
+  const [phase, setPhase] = useState('menu');     // 'menu' | 'move'
   const [tablesForMove, setTablesForMove] = useState([]);
   const [busy, setBusy] = useState(false);
   const slide = useRef(new Animated.Value(0)).current;
 
-  // Reset state khi mở
   useEffect(() => {
     if (visible) {
       setPhase('menu');
       setTablesForMove([]);
       setBusy(false);
-      Animated.timing(slide, { toValue: 1, duration: 180, useNativeDriver: true, easing: Easing.out(Easing.cubic) }).start();
+      Animated.timing(slide, {
+        toValue: 1, duration: 180,
+        useNativeDriver: true, easing: Easing.out(Easing.cubic),
+      }).start();
     } else {
       slide.setValue(0);
     }
@@ -52,7 +55,7 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
 
   // ─── Action: chuyển bàn ────────────────────────────────────────────────
   const startMove = async () => {
-    if (!hasOpenOrder) return Alert.alert('Bàn chưa có order', 'Không có gì để chuyển.');
+    if (!hasOpenOrder) return toast.info('Không có gì để chuyển', 'Bàn này chưa có order mở.');
     setBusy(true);
     try {
       const list = await Api.listTables({ with_status: 'true' });
@@ -62,12 +65,12 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
       );
       if (candidates.length === 0) {
         setBusy(false);
-        return Alert.alert('Hết bàn trống', 'Không có bàn nào trống để chuyển sang.');
+        return toast.info('Hết bàn trống', 'Không có bàn nào để chuyển sang.');
       }
       setTablesForMove(candidates);
       setPhase('move');
     } catch (e) {
-      Alert.alert('Lỗi', e.message || 'Không tải được danh sách bàn');
+      toast.err('Không tải được danh sách bàn', e.message || 'Lỗi không xác định');
     } finally { setBusy(false); }
   };
 
@@ -75,77 +78,71 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
     setBusy(true);
     try {
       await Api.moveOrder(table.open_order_id, toTable.id);
-      reload();
       onClose && onClose();
-      Alert.alert('Đã chuyển', `Order đã chuyển sang bàn ${toTable.code}`);
+      reload();
+      toast.ok('Đã chuyển bàn', `Order chuyển sang ${toTable.code}`);
     } catch (e) {
-      Alert.alert('Lỗi chuyển bàn', e.message || 'Không thể chuyển bàn');
+      toast.err('Lỗi chuyển bàn', e.message || 'Không thể chuyển bàn');
     } finally { setBusy(false); }
   };
 
   // ─── Action: dọn bàn ───────────────────────────────────────────────────
-  const askClear = () => {
-    if (!hasOpenOrder) return Alert.alert('Bàn đã trống', 'Không có gì để dọn.');
-    Alert.alert(
-      `Dọn bàn ${table.code}?`,
-      'Order đang mở sẽ bị HUỶ (không tạo hoá đơn).\nDùng khi khách bỏ về hoặc cần reset bàn.',
-      [
-        { text: 'Huỷ', style: 'cancel' },
-        { text: 'Dọn bàn', style: 'destructive', onPress: doClear },
-      ]
-    );
-  };
-  const doClear = async () => {
+  const askClear = async () => {
+    if (!hasOpenOrder) return toast.info('Bàn đã trống', 'Không có gì để dọn.');
+    const ok = await confirm({
+      title: `Dọn bàn ${table.code}?`,
+      message: 'Order đang mở sẽ bị HUỶ và không tạo hoá đơn.\nDùng khi khách bỏ về hoặc cần reset bàn.',
+      okText: 'Dọn bàn',
+      cancelText: 'Huỷ',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await Api.clearTable(table.id, 'Khách bỏ về');
-      reload();
       onClose && onClose();
+      reload();
+      toast.ok(`Đã dọn bàn ${table.code}`);
     } catch (e) {
-      Alert.alert('Lỗi dọn bàn', e.message || 'Không thể dọn bàn');
+      toast.err('Lỗi dọn bàn', e.message || 'Không thể dọn bàn');
     } finally { setBusy(false); }
   };
 
   // ─── Action: bật/tắt bàn ───────────────────────────────────────────────
-  const askToggle = () => {
+  const askToggle = async () => {
     if (isActive && hasOpenOrder) {
-      return Alert.alert(
+      return toast.info(
         'Không thể tắt',
         'Bàn đang có order mở. Vui lòng thanh toán hoặc dọn bàn trước.'
       );
     }
-    Alert.alert(
-      isActive ? `Tạm khoá bàn ${table.code}?` : `Kích hoạt lại bàn ${table.code}?`,
-      isActive
-        ? 'Khi tắt, không thể tạo order mới trên bàn này. Dùng khi bàn hỏng/đang sửa.'
+    const ok = await confirm({
+      title: isActive ? `Tạm khoá bàn ${table.code}?` : `Kích hoạt lại bàn ${table.code}?`,
+      message: isActive
+        ? 'Khi tắt, không thể tạo order mới trên bàn này. Dùng khi bàn hỏng hoặc đang sửa.'
         : 'Bàn sẽ sẵn sàng nhận order mới.',
-      [
-        { text: 'Huỷ', style: 'cancel' },
-        { text: isActive ? 'Tắt bàn' : 'Bật bàn', onPress: () => doToggle(!isActive) },
-      ]
-    );
-  };
-  const doToggle = async (makeActive) => {
+      okText: isActive ? 'Tắt bàn' : 'Bật bàn',
+      cancelText: 'Huỷ',
+      danger: isActive,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
-      await Api.setTableActive(table.id, makeActive);
-      reload();
+      await Api.setTableActive(table.id, !isActive);
       onClose && onClose();
+      reload();
+      toast.ok(isActive ? `Đã tắt bàn ${table.code}` : `Đã bật bàn ${table.code}`);
     } catch (e) {
-      Alert.alert('Lỗi', e.message || 'Không thể cập nhật bàn');
+      toast.err('Lỗi cập nhật', e.message || 'Không thể cập nhật bàn');
     } finally { setBusy(false); }
   };
 
-  // ─── Items ─────────────────────────────────────────────────────────────
+  // ─── Build items ───────────────────────────────────────────────────────
   const items = [
-    {
-      key: 'move', icon: 'swap-horizontal', label: 'Chuyển bàn…',
-      disabled: !hasOpenOrder, onPress: startMove,
-    },
-    {
-      key: 'clear', icon: 'trash-outline', label: 'Dọn bàn (huỷ order)',
-      danger: true, disabled: !hasOpenOrder, onPress: askClear,
-    },
+    { key: 'move',  icon: 'swap-horizontal',     label: 'Chuyển bàn…',
+      disabled: !hasOpenOrder, onPress: startMove },
+    { key: 'clear', icon: 'trash-outline',       label: 'Dọn bàn (huỷ order)',
+      danger: true, disabled: !hasOpenOrder, onPress: askClear },
     { sep: true },
     isActive
       ? { key: 'disable', icon: 'pause-circle-outline', label: 'Tạm khoá bàn',
@@ -282,8 +279,7 @@ const s = StyleSheet.create({
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12,
   },
   rowPressed: { backgroundColor: '#f3f4f6' },
   rowDisabled: { opacity: 0.4 },

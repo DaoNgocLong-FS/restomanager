@@ -1,10 +1,12 @@
 // Waiter / cashier-add-more: chọn món, gửi vào order (tạo mới hoặc append).
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
 import { useAuth } from '../AuthContext';
 import { colors, fmt } from '../theme';
+import { toast } from '../components/Notify';
 
 export default function MenuScreen({ route, navigation }) {
   const table = route.params?.table;
@@ -13,7 +15,7 @@ export default function MenuScreen({ route, navigation }) {
   const [cats, setCats] = useState([]);
   const [cat, setCat] = useState('all');
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState({});      // { menu_item_id: qty }
+  const [cart, setCart] = useState({});
   const [openOrder, setOpenOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -27,7 +29,7 @@ export default function MenuScreen({ route, navigation }) {
           try { setOpenOrder(await Api.getOpenOrderForTable(table.id)); } catch {}
         }
       } catch (e) {
-        Alert.alert('Lỗi tải dữ liệu', e.message);
+        toast.err('Lỗi tải dữ liệu', e.message);
       } finally { setLoading(false); }
     })();
   }, []);
@@ -55,7 +57,7 @@ export default function MenuScreen({ route, navigation }) {
   });
 
   const send = async () => {
-    if (count === 0) { Alert.alert('Chưa có món','Thêm món trước khi gửi.'); return; }
+    if (count === 0) { toast.info('Chưa có món', 'Thêm món trước khi gửi.'); return; }
     setSending(true);
     try {
       const apiItems = Object.entries(cart).map(([id,qty]) => {
@@ -72,10 +74,10 @@ export default function MenuScreen({ route, navigation }) {
           items: apiItems,
         });
       }
-      Alert.alert('Thành công', `Đã gửi ${count} món cho bàn ${table.code}`);
+      toast.ok(`Đã gửi ${count} món`, `Bàn ${table.code}`);
       navigation.goBack();
     } catch (e) {
-      Alert.alert('Gửi thất bại', e.message);
+      toast.err('Gửi thất bại', e.message);
     } finally { setSending(false); }
   };
 
@@ -84,7 +86,7 @@ export default function MenuScreen({ route, navigation }) {
   }
 
   return (
-    <View style={s.wrap}>
+    <SafeAreaView edges={['bottom']} style={s.wrap}>
       <View style={s.search}>
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput value={search} onChangeText={setSearch} placeholder="Tìm món…" style={s.searchInput}/>
@@ -144,7 +146,7 @@ export default function MenuScreen({ route, navigation }) {
           </View>
         </TouchableOpacity>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
