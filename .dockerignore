@@ -1,0 +1,17 @@
+# Build artifacts không cần copy vào image
+**/node_modules
+**/dist
+**/.expo
+**/.git
+**/.DS_Store
+**/coverage
+**/.env.local
+**/.env.*.local
+**/npm-debug.log*
+
+# Mobile (build trên dev máy bằng Expo, không qua Docker)
+mobile/
+
+# Documentation
+*.md
+!frontend/admin.html

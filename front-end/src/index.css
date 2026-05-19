@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base ───────────────────────────────────────────────────────────── */
+html, body, #root { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Reusable component classes ─────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl border border-border-soft shadow-soft;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-dark transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container text-on-surface font-semibold hover:bg-surface-high transition disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-danger text-white font-semibold hover:bg-red-700 transition disabled:opacity-50;
+  }
+  .pill-busy  { @apply bg-amber-100 text-amber-800; }
+  .pill-pay   { @apply bg-red-100 text-red-800; }
+  .pill-empty { @apply bg-emerald-100 text-emerald-800; }
+  .pill-off   { @apply bg-slate-200 text-slate-600; }
+
+  .field {
+    @apply w-full px-4 py-3 rounded-xl border border-border bg-white outline-none focus:border-primary transition placeholder:text-muted;
+  }
+}
