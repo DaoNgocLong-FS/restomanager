@@ -1,29 +1,21 @@
 // =============================================================================
-//  LoginPage — đăng nhập + redirect theo role (validate bằng react-hook-form)
+//  LoginPage — đăng nhập + redirect theo role
 // =============================================================================
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { useAuth } from './AuthContext';
 import { useToast } from '../components/Toast';
 import { Utensils, LogIn, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const { user, login, booting } = useAuth();
+  const [u, setU] = useState('');
+  const [p, setP] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const [authErr, setAuthErr] = useState('');   // lỗi trả từ server (sai pass...)
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    defaultValues: { username: '', password: '' },
-    mode: 'onSubmit',         // validate khi submit, không quá phiền lúc gõ
-    reValidateMode: 'onChange',
-  });
 
   // Đã login thì đẩy về trang chính
   useEffect(() => {
@@ -33,14 +25,17 @@ export default function LoginPage() {
     }
   }, [user, booting]); // eslint-disable-line
 
-  const onSubmit = async ({ username, password }) => {
-    setAuthErr('');
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
     try {
-      const me = await login(username.trim(), password);
+      const me = await login(u.trim(), p);
       toast.ok('Đăng nhập thành công', me?.full_name || me?.username);
       navigate(defaultPath(me.role), { replace: true });
     } catch (e) {
-      setAuthErr(e.message || 'Đăng nhập thất bại');
+      setErr(e.message || 'Đăng nhập thất bại');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -55,56 +50,30 @@ export default function LoginPage() {
           <p className="text-sm text-white/75 mt-1">Hệ thống quản lý nhà hàng</p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="card p-6" noValidate>
+        <form onSubmit={submit} className="card p-6">
           <h2 className="text-lg font-bold text-on-surface mb-4">Đăng nhập</h2>
 
           <label className="block text-xs font-semibold text-on-surface-variant mb-1">
             Tên đăng nhập
           </label>
-          <input
-            className={'field ' + (errors.username ? 'border-danger' : '')}
-            autoComplete="username"
-            autoFocus
-            placeholder=""
-            {...register('username', {
-              required: 'Vui lòng nhập tên đăng nhập',
-              minLength: { value: 1, message: 'Tên đăng nhập không hợp lệ' },
-              setValueAs: (v) => (v ?? '').trim(),
-            })}
-          />
-          {errors.username && (
-            <p className="mt-1 text-xs text-danger">{errors.username.message}</p>
-          )}
+          <input className="field" autoComplete="username" autoFocus
+            value={u} onChange={(e) => setU(e.target.value)} placeholder=""/>
 
           <label className="block text-xs font-semibold text-on-surface-variant mb-1 mt-3">
             Mật khẩu
           </label>
-          <input
-            className={'field ' + (errors.password ? 'border-danger' : '')}
-            type="password"
-            autoComplete="current-password"
-            placeholder=""
-            {...register('password', {
-              required: 'Vui lòng nhập mật khẩu',
-              minLength: { value: 1, message: 'Mật khẩu không hợp lệ' },
-            })}
-          />
-          {errors.password && (
-            <p className="mt-1 text-xs text-danger">{errors.password.message}</p>
-          )}
+          <input className="field" type="password" autoComplete="current-password"
+            value={p} onChange={(e) => setP(e.target.value)} placeholder=""/>
 
-          {/* Lỗi từ server (sai mật khẩu, tài khoản khoá, mạng lỗi…) */}
-          {authErr && <div className="mt-3 text-sm text-danger">{authErr}</div>}
+          {err && <div className="mt-3 text-sm text-danger">{err}</div>}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="btn-primary w-full mt-5 h-12 text-base"
-          >
-            {isSubmitting
+          <button type="submit" disabled={busy}
+            className="btn-primary w-full mt-5 h-12 text-base">
+            {busy
               ? <Loader2 className="w-5 h-5 animate-spin" />
               : <><LogIn className="w-5 h-5" /> Đăng nhập</>}
           </button>
+
         </form>
       </div>
     </div>

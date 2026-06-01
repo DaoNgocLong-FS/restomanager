@@ -1,8 +1,9 @@
 // =============================================================================
 //  TableActionSheet — bottom sheet hiển thị khi long-press 1 thẻ bàn
 //  - Action: chuyển bàn / dọn bàn / bật-tắt bàn (tuỳ trạng thái + role)
-//  - KHÔNG dùng Alert.alert nữa: thay bằng toast + ConfirmDialog tự xây
-//    để đồng bộ với phần còn lại của app và có UI/UX tốt hơn
+//  - KHÔNG dùng Alert.alert: thay bằng toast + ConfirmDialog tự xây
+//
+//  Fix 2026-05: thoát modal được kể cả khi busy (tránh đơ khi API chậm/timeout)
 // =============================================================================
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -16,18 +17,12 @@ import { toast, useConfirm } from './Notify';
 
 const ROLES_ALLOWED = new Set(['admin', 'cashier']);
 
-/**
- * Props:
- *  - visible: boolean
- *  - table:   { id, code, status, is_active, open_order_id, ... }
- *  - role:    'admin' | 'cashier' | ...
- *  - onClose, onChanged
- */
 export default function TableActionSheet({ visible, table, role, onClose, onChanged }) {
   const confirm = useConfirm();
   const [phase, setPhase] = useState('menu');     // 'menu' | 'move'
   const [tablesForMove, setTablesForMove] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [busyMsg, setBusyMsg] = useState('');     // text hiện cùng spinner
   const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -35,6 +30,7 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
       setPhase('menu');
       setTablesForMove([]);
       setBusy(false);
+      setBusyMsg('');
       Animated.timing(slide, {
         toValue: 1, duration: 180,
         useNativeDriver: true, easing: Easing.out(Easing.cubic),
@@ -50,40 +46,74 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
   const isActive = table.is_active !== false;
   const hasOpenOrder = !!table.open_order_id || table.status === 'busy' || table.status === 'pay';
 
-  const close = () => { if (busy) return; onClose && onClose(); };
+  // FIX: cho phép đóng kể cả khi busy (huỷ thao tác hiện tại)
+  // Đây là escape hatch — tránh user kẹt khi API treo
+  const close = () => {
+    setBusy(false);
+    setBusyMsg('');
+    onClose && onClose();
+  };
   const reload = () => { onChanged && onChanged(); };
 
   // ─── Action: chuyển bàn ────────────────────────────────────────────────
   const startMove = async () => {
-    if (!hasOpenOrder) return toast.info('Không có gì để chuyển', 'Bàn này chưa có order mở.');
+    if (!hasOpenOrder) {
+      return toast.info('Không có gì để chuyển', 'Bàn này chưa có order mở.');
+    }
     setBusy(true);
+    setBusyMsg('Đang tải danh sách bàn trống…');
     try {
+      console.log('[TableActionSheet] Loading tables for move...');
       const list = await Api.listTables({ with_status: 'true' });
-      const candidates = list.filter(t =>
-        t.id !== table.id && t.is_active !== false &&
-        (t.status === 'empty' || !t.status)
+      console.log('[TableActionSheet] Got', list?.length, 'tables');
+
+      const candidates = (list || []).filter(t =>
+        t.id !== table.id &&
+        t.is_active !== false &&
+        // Bàn trống: status không phải 'busy' và 'pay' và 'inactive', không có open_order_id
+        t.status !== 'busy' &&
+        t.status !== 'pay' &&
+        t.status !== 'inactive' &&
+        !t.open_order_id
       );
+      console.log('[TableActionSheet] Found', candidates.length, 'candidate tables');
+
       if (candidates.length === 0) {
         setBusy(false);
+        setBusyMsg('');
         return toast.info('Hết bàn trống', 'Không có bàn nào để chuyển sang.');
       }
       setTablesForMove(candidates);
       setPhase('move');
     } catch (e) {
+      console.warn('[TableActionSheet] startMove error:', e?.message);
       toast.err('Không tải được danh sách bàn', e.message || 'Lỗi không xác định');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+      setBusyMsg('');
+    }
   };
 
   const doMove = async (toTable) => {
+    // FIX: validate open_order_id trước, tránh gọi /orders/undefined/move
+    if (!table.open_order_id) {
+      toast.err('Không tìm thấy order', 'Bàn này chưa có order mở để chuyển.');
+      return;
+    }
     setBusy(true);
+    setBusyMsg(`Đang chuyển sang bàn ${toTable.code}…`);
     try {
+      console.log('[TableActionSheet] Moving order', table.open_order_id, '→', toTable.id);
       await Api.moveOrder(table.open_order_id, toTable.id);
-      onClose && onClose();
-      reload();
       toast.ok('Đã chuyển bàn', `Order chuyển sang ${toTable.code}`);
+      close();      // dùng close() đã reset busy
+      reload();
     } catch (e) {
+      console.warn('[TableActionSheet] doMove error:', e?.message);
       toast.err('Lỗi chuyển bàn', e.message || 'Không thể chuyển bàn');
-    } finally { setBusy(false); }
+      setBusy(false);
+      setBusyMsg('');
+    }
   };
 
   // ─── Action: dọn bàn ───────────────────────────────────────────────────
@@ -92,20 +122,21 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
     const ok = await confirm({
       title: `Dọn bàn ${table.code}?`,
       message: 'Order đang mở sẽ bị HUỶ và không tạo hoá đơn.\nDùng khi khách bỏ về hoặc cần reset bàn.',
-      okText: 'Dọn bàn',
-      cancelText: 'Huỷ',
-      danger: true,
+      okText: 'Dọn bàn', cancelText: 'Huỷ', danger: true,
     });
     if (!ok) return;
     setBusy(true);
+    setBusyMsg('Đang dọn bàn…');
     try {
       await Api.clearTable(table.id, 'Khách bỏ về');
-      onClose && onClose();
-      reload();
       toast.ok(`Đã dọn bàn ${table.code}`);
+      close();
+      reload();
     } catch (e) {
       toast.err('Lỗi dọn bàn', e.message || 'Không thể dọn bàn');
-    } finally { setBusy(false); }
+      setBusy(false);
+      setBusyMsg('');
+    }
   };
 
   // ─── Action: bật/tắt bàn ───────────────────────────────────────────────
@@ -122,19 +153,21 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
         ? 'Khi tắt, không thể tạo order mới trên bàn này. Dùng khi bàn hỏng hoặc đang sửa.'
         : 'Bàn sẽ sẵn sàng nhận order mới.',
       okText: isActive ? 'Tắt bàn' : 'Bật bàn',
-      cancelText: 'Huỷ',
-      danger: isActive,
+      cancelText: 'Huỷ', danger: isActive,
     });
     if (!ok) return;
     setBusy(true);
+    setBusyMsg(isActive ? 'Đang tắt bàn…' : 'Đang bật bàn…');
     try {
       await Api.setTableActive(table.id, !isActive);
-      onClose && onClose();
-      reload();
       toast.ok(isActive ? `Đã tắt bàn ${table.code}` : `Đã bật bàn ${table.code}`);
+      close();
+      reload();
     } catch (e) {
       toast.err('Lỗi cập nhật', e.message || 'Không thể cập nhật bàn');
-    } finally { setBusy(false); }
+      setBusy(false);
+      setBusyMsg('');
+    }
   };
 
   // ─── Build items ───────────────────────────────────────────────────────
@@ -194,8 +227,7 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
                       ]}
                     >
                       <Ionicons
-                        name={it.icon}
-                        size={22}
+                        name={it.icon} size={22}
                         color={it.danger ? '#b91c1c' : colors.onSurface}
                       />
                       <Text style={[s.rowLabel, it.danger && { color: '#b91c1c' }]}>
@@ -206,10 +238,16 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
               )
             )}
 
-            {busy && <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />}
+            {/* Busy indicator có text + nút huỷ */}
+            {busy && (
+              <View style={s.busyBox}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={s.busyText}>{busyMsg || 'Đang xử lý…'}</Text>
+              </View>
+            )}
 
-            <Pressable onPress={close} style={s.cancelBtn} disabled={busy}>
-              <Text style={s.cancelText}>Đóng</Text>
+            <Pressable onPress={close} style={s.cancelBtn}>
+              <Text style={s.cancelText}>{busy ? 'Huỷ' : 'Đóng'}</Text>
             </Pressable>
           </>
         )}
@@ -219,17 +257,17 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
             <View style={s.header}>
               <Text style={s.title}>Chuyển sang bàn nào?</Text>
               <Text style={s.subtitle}>
-                Từ bàn {table.code} · chỉ liệt kê bàn đang trống
+                Từ bàn {table.code} · {tablesForMove.length} bàn trống
               </Text>
             </View>
             <FlatList
               data={tablesForMove}
-              keyExtractor={(t) => t.id}
+              keyExtractor={(t) => String(t.id)}   /* FIX: ép string */
               style={{ maxHeight: 360 }}
               renderItem={({ item }) => (
                 <Pressable
                   onPress={busy ? undefined : () => doMove(item)}
-                  style={({ pressed }) => [s.row, pressed && s.rowPressed]}
+                  style={({ pressed }) => [s.row, pressed && s.rowPressed, busy && s.rowDisabled]}
                 >
                   <View style={s.tableIcon}>
                     <Ionicons name="restaurant-outline" size={18} color={colors.primary} />
@@ -245,14 +283,29 @@ export default function TableActionSheet({ visible, table, role, onClose, onChan
               )}
               ItemSeparatorComponent={() => <View style={s.sep} />}
             />
-            {busy && <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />}
-            <Pressable
-              onPress={() => setPhase('menu')}
-              style={s.cancelBtn}
-              disabled={busy}
-            >
-              <Text style={s.cancelText}>Quay lại</Text>
-            </Pressable>
+
+            {/* Busy indicator có text */}
+            {busy && (
+              <View style={s.busyBox}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={s.busyText}>{busyMsg || 'Đang chuyển bàn…'}</Text>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginTop: 12 }}>
+              <Pressable
+                onPress={() => setPhase('menu')}
+                style={[s.cancelBtn, { flex: 1, marginHorizontal: 0 }]}
+              >
+                <Text style={s.cancelText}>{busy ? 'Huỷ' : 'Quay lại'}</Text>
+              </Pressable>
+              <Pressable
+                onPress={close}
+                style={[s.cancelBtn, { flex: 1, marginHorizontal: 0 }]}
+              >
+                <Text style={s.cancelText}>Đóng</Text>
+              </Pressable>
+            </View>
           </>
         )}
       </Animated.View>
@@ -294,6 +347,15 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12, marginHorizontal: 12, marginTop: 6,
   },
   noticeText: { fontSize: 13, color: colors.muted, flex: 1 },
+
+  /* NEW: busy box có text giải thích đang làm gì */
+  busyBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#eff6ff', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12,
+    marginHorizontal: 12, marginTop: 6,
+  },
+  busyText: { fontSize: 13, color: colors.primary, flex: 1, fontWeight: '600' },
 
   cancelBtn: {
     marginTop: 12, marginHorizontal: 12,

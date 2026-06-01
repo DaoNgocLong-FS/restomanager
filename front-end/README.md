@@ -2,11 +2,9 @@
 
 Phiên bản web mới của RestoManager, viết lại bằng **React 18 + Vite + Tailwind CSS**, thay thế hoàn toàn phần web cũ (POS + Admin vanilla JS).
 
-> Đây là kết quả của **đợt feedback từ giảng viên**: chuyển web từ vanilla JS sang React.js.
 
 ## 1. Mục đích & phạm vi
 
-### Đã migrate sang React (folder này)
 
 | Module | Trạng thái | Trang React |
 |---|---|---|

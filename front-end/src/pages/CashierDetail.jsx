@@ -6,7 +6,6 @@
 // =============================================================================
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useForm, Controller } from 'react-hook-form';
 import { Plus, Minus, Trash2, ArrowLeft, ChevronRight, X,
          CreditCard, Banknote, QrCode, ScanLine } from 'lucide-react';
 import { Api, fmt } from '../api/client';
@@ -37,7 +36,7 @@ export default function CashierDetail() {
     setLoading(true);
     try {
       const tables = await Api.listTables({ with_status: 'true' });
-      const t = tables.find(x => x.code === code);
+      const t = tables.find(x => String(x.code) === code);
       if (!t) {
         toast.err('Không tìm thấy bàn', `Bàn ${code} không tồn tại`);
         navigate('/cashier/tables');
@@ -203,49 +202,42 @@ function Row({ label, value, bold, big }) {
 
 // ─── Checkout modal ───────────────────────────────────────────────────────
 function CheckoutModal({ table, order, sub, vat, total, onClose, onDone }) {
+  const [method, setMethod] = useState('cash');
+  const [paid, setPaid] = useState(String(total));
+  const [busy, setBusy] = useState(false);
   const [invoice, setInvoice] = useState(null);
   const toast = useToast();
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm({
-    defaultValues: { method: 'cash', paid: total },
-    mode: 'onSubmit',
-    reValidateMode: 'onChange',
-  });
-
-  const method  = watch('method');
-  const paidNum = Number(watch('paid')) || 0;
-  const change  = Math.max(0, paidNum - total);
-
+  const paidNum = Number(paid) || 0;
+  const change = Math.max(0, paidNum - total);
   const quickAmounts = useMemo(
     () => [total, total + 5000, total + 10000, total + 50000, total + 100000, total + 200000],
     [total]
   );
 
-  const onConfirm = async (form) => {
+  const onConfirm = async () => {
+    if (paidNum < total) {
+      toast.info('Khách trả chưa đủ', `Còn thiếu ${fmt(total - paidNum)}`);
+      return;
+    }
+    setBusy(true);
     try {
       const inv = await Api.checkout(order.id, {
-        cashier_name:   'Thu ngân',
-        payment_method: form.method,
-        vat_rate:       8,
-        discount:       0,
-        paid_amount:    Number(form.paid),
+        cashier_name: 'Thu ngân',
+        payment_method: method,
+        vat_rate: 8,
+        discount: 0,
+        paid_amount: paidNum,
       });
       setInvoice(inv);
       toast.ok('Thanh toán thành công', `Hoá đơn ${inv?.code || ''}`);
     } catch (e) {
       toast.err('Thanh toán thất bại', e.message);
-    }
+    } finally { setBusy(false); }
   };
 
-  // ── Receipt view sau khi checkout xong ────────────────────────────────
   if (invoice) {
+    // Receipt view
     return (
       <Modal onClose={onDone} title="Hoá đơn đã lưu" subtitle={invoice.code}>
         <div className="space-y-3">
@@ -280,100 +272,56 @@ function CheckoutModal({ table, order, sub, vat, total, onClose, onDone }) {
     );
   }
 
-  // ── Form thanh toán ───────────────────────────────────────────────────
   return (
     <Modal onClose={onClose} title={`Thanh toán bàn ${table.code}`}>
-      <form onSubmit={handleSubmit(onConfirm)} noValidate className="space-y-4">
+      <div className="space-y-4">
         <div className="card p-3">
           <Row label="Tạm tính" value={fmt(sub)} />
           <Row label="VAT (8%)" value={fmt(vat)} />
           <Row label="Cần thanh toán" value={fmt(total)} bold big />
         </div>
 
-        {/* Phương thức thanh toán — nhóm nút như radio group, dùng Controller */}
         <div>
           <div className="text-xs font-semibold text-on-surface-variant mb-2">Phương thức</div>
-          <Controller
-            control={control}
-            name="method"
-            rules={{
-              required: 'Chọn phương thức thanh toán',
-              validate: (v) =>
-                PAY_METHODS.some(p => p.key === v) || 'Phương thức không hợp lệ',
-            }}
-            render={({ field }) => (
-              <div className="grid grid-cols-2 gap-2">
-                {PAY_METHODS.map(m => (
-                  <button
-                    key={m.key} type="button"
-                    onClick={() => field.onChange(m.key)}
-                    className={
-                      'flex items-center gap-2 px-3 py-3 rounded-xl border-2 transition ' +
-                      (field.value === m.key
-                        ? 'border-primary bg-primary-container text-primary'
-                        : 'border-border bg-white text-on-surface-variant hover:border-primary/50')
-                    }
-                  >
-                    <m.icon className="w-4 h-4" />
-                    <span className="text-sm font-semibold">{m.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          />
-          {errors.method && (
-            <p className="mt-1 text-xs text-danger">{errors.method.message}</p>
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            {PAY_METHODS.map(m => (
+              <button key={m.key} onClick={() => setMethod(m.key)}
+                className={
+                  'flex items-center gap-2 px-3 py-3 rounded-xl border-2 transition ' +
+                  (method === m.key
+                    ? 'border-primary bg-primary-container text-primary'
+                    : 'border-border bg-white text-on-surface-variant hover:border-primary/50')
+                }>
+                <m.icon className="w-4 h-4" />
+                <span className="text-sm font-semibold">{m.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Khách trả — number với validate >= total */}
         <div>
           <div className="text-xs font-semibold text-on-surface-variant mb-2">Khách trả</div>
-          <input
-            type="number" inputMode="numeric"
-            className={
-              'field text-right text-2xl font-bold text-primary ' +
-              (errors.paid ? 'border-danger' : '')
-            }
-            {...register('paid', {
-              required: 'Nhập số tiền khách trả',
-              valueAsNumber: true,
-              validate: {
-                isNumber:  (v) => Number.isFinite(Number(v)) || 'Số tiền không hợp lệ',
-                notNeg:    (v) => Number(v) >= 0          || 'Số tiền không được âm',
-                enough:    (v) => Number(v) >= total      || `Khách trả thiếu, còn thiếu ${fmt(total - Number(v))}`,
-                notTooBig: (v) => Number(v) <= 1e10       || 'Số tiền quá lớn',
-              },
-            })}
-          />
-          {errors.paid && (
-            <p className="mt-1 text-xs text-danger">{errors.paid.message}</p>
-          )}
-
-          {/* Quick-pick các mệnh giá hợp lý */}
+          <input type="number" inputMode="numeric" className="field text-right text-2xl font-bold text-primary"
+            value={paid} onChange={(e) => setPaid(e.target.value)} />
           <div className="grid grid-cols-3 gap-2 mt-2">
             {quickAmounts.map(v => (
-              <button
-                key={v} type="button"
-                onClick={() => setValue('paid', v, { shouldValidate: true })}
-                className="px-2 py-2 rounded-lg bg-surface-low border border-border text-xs font-semibold hover:bg-surface-container"
-              >
+              <button key={v} onClick={() => setPaid(String(v))}
+                className="px-2 py-2 rounded-lg bg-surface-low border border-border text-xs font-semibold hover:bg-surface-container">
                 {fmt(v)}
               </button>
             ))}
           </div>
-
           <div className="flex justify-between mt-3 px-3 py-2 bg-secondary-container rounded-xl">
             <span className="text-sm text-muted">Tiền thừa</span>
             <span className="font-bold text-secondary">{fmt(change)}</span>
           </div>
         </div>
 
-        <button type="submit" disabled={isSubmitting}
+        <button onClick={onConfirm} disabled={busy}
           className="btn-primary w-full h-12 text-base">
-          {isSubmitting ? 'Đang xử lý…' : 'Xác nhận thanh toán'}
+          {busy ? 'Đang xử lý…' : 'Xác nhận thanh toán'}
         </button>
-      </form>
+      </div>
     </Modal>
   );
 }

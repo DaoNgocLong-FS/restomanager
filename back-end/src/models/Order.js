@@ -247,7 +247,7 @@ class OrderModel {
 
     // Bàn đích phải trống (không có order mở)
     const occupied = await db.queryOne(
-      `SELECT id, code FROM orders o
+      `SELECT o.id, t.code FROM orders o
        JOIN tables t ON t.id = o.table_id
        WHERE o.table_id = $1 AND o.status IN ('pending','serving') LIMIT 1`,
       [toTableId]

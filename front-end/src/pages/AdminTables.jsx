@@ -1,8 +1,7 @@
 // =============================================================================
-//  AdminTables — CRUD bàn (validate bằng react-hook-form)
+//  AdminTables — CRUD bàn theo khu vực (indoor / outdoor / vip)
 // =============================================================================
 import React, { useCallback, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { Api } from '../api/client';
 import { useToast } from '../components/Toast';
@@ -11,13 +10,15 @@ import { useSocket } from '../hooks/useSocket';
 import Modal from '../components/Modal';
 
 const ZONE_LABEL = { indoor: 'Trong nhà', outdoor: 'Sân vườn', vip: 'VIP' };
-const ZONE_VALUES = ['indoor', 'outdoor', 'vip'];
+
+const EMPTY = { id: null, code: '', zone: 'indoor', capacity: 4, is_active: true };
 
 export default function AdminTables() {
-  const [tables, setTables]   = useState([]);
+  const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
-  const toast   = useToast();
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(async () => {
@@ -29,8 +30,34 @@ export default function AdminTables() {
   useEffect(() => { load(); }, [load]);
   useSocket({ 'tables:changed': load });
 
-  const openCreate = () => setEditing({ code: '', zone: 'indoor', capacity: 4, is_active: true });
-  const openEdit   = (t) => setEditing({ id: t.id, ...t });
+  const openCreate = () => setEditing({ ...EMPTY });
+  const openEdit   = (t) => setEditing({
+    id: t.id, code: t.code, zone: t.zone, capacity: t.capacity, is_active: !!t.is_active,
+  });
+
+  const onSave = async () => {
+    const f = editing;
+    if (!f.code?.trim()) {
+      toast.err('Thiếu mã bàn', 'Cần đặt mã (vd: T1-07).');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        code: f.code.trim().toUpperCase(),
+        zone: f.zone,
+        capacity: parseInt(f.capacity, 10) || 4,
+        is_active: !!f.is_active,
+      };
+      if (f.id) await Api.updateTable(f.id, payload);
+      else      await Api.createTable(payload);
+      setEditing(null);
+      toast.ok('Đã lưu');
+      load();
+    } catch (e) {
+      toast.err('Lưu thất bại', e.message);
+    } finally { setSaving(false); }
+  };
 
   const onDelete = async (t) => {
     const ok = await confirm({
@@ -74,143 +101,76 @@ export default function AdminTables() {
                 'mt-2 text-xs ' + (t.is_active ? 'text-success' : 'text-danger')
               }>{t.is_active ? 'Đang dùng' : 'Tạm ngừng'}</div>
               <div className="flex gap-1 mt-3 pt-3 border-t border-border-soft">
-                <button onClick={() => openEdit(t)} className="btn-ghost text-xs py-1.5 flex-1">
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => onDelete(t)} className="btn-ghost text-xs py-1.5 text-danger">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <button
+                  onClick={() => openEdit(t)}
+                  className="btn-ghost text-xs py-1.5 flex-1"
+                ><Edit2 className="w-3.5 h-3.5" /></button>
+                <button
+                  onClick={() => onDelete(t)}
+                  className="btn-ghost text-xs py-1.5 text-danger"
+                ><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {editing && (
-        <TableForm
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load(); }}
-        />
-      )}
+      <Modal
+        open={!!editing}
+        title={editing?.id ? 'Sửa bàn' : 'Thêm bàn'}
+        onClose={() => setEditing(null)}
+        footer={
+          <>
+            <button className="btn-ghost text-sm py-2" onClick={() => setEditing(null)}>Huỷ</button>
+            <button className="btn-primary text-sm py-2" onClick={onSave} disabled={saving}>
+              {saving ? 'Đang lưu…' : 'Lưu'}
+            </button>
+          </>
+        }
+      >
+        {editing && (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-xs text-muted">Mã bàn</span>
+              <input
+                value={editing.code}
+                onChange={(e) => setEditing(s => ({ ...s, code: e.target.value }))}
+                placeholder="VD: T1-07"
+                className="field mt-1 py-2"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted">Khu vực</span>
+              <select
+                value={editing.zone}
+                onChange={(e) => setEditing(s => ({ ...s, zone: e.target.value }))}
+                className="field mt-1 py-2"
+              >
+                <option value="indoor">Trong nhà</option>
+                <option value="outdoor">Sân vườn</option>
+                <option value="vip">VIP</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted">Sức chứa</span>
+              <input
+                type="number" min="1"
+                value={editing.capacity}
+                onChange={(e) => setEditing(s => ({ ...s, capacity: e.target.value }))}
+                className="field mt-1 py-2"
+              />
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editing.is_active}
+                onChange={(e) => setEditing(s => ({ ...s, is_active: e.target.checked }))}
+              />
+              <span className="text-sm">Đang sử dụng</span>
+            </label>
+          </div>
+        )}
+      </Modal>
     </div>
-  );
-}
-
-// =============================================================================
-//  Form CRUD bàn
-// =============================================================================
-function TableForm({ initial, onClose, onSaved }) {
-  const isEdit = !!initial.id;
-  const toast  = useToast();
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-    setError,
-  } = useForm({
-    defaultValues: initial,
-    mode: 'onSubmit',
-    reValidateMode: 'onChange',
-  });
-
-  const onSubmit = async (form) => {
-    const payload = {
-      code: form.code.trim().toUpperCase(),
-      zone: form.zone,
-      capacity: Number(form.capacity),
-      is_active: !!form.is_active,
-    };
-    try {
-      if (isEdit) await Api.updateTable(initial.id, payload);
-      else        await Api.createTable(payload);
-      toast.ok('Đã lưu');
-      onSaved();
-    } catch (e) {
-      const msg = e.message || '';
-      if (/tồn tại/i.test(msg) || /trùng/i.test(msg) || /duplicate/i.test(msg)) {
-        setError('code', { type: 'server', message: 'Mã bàn đã tồn tại' });
-      } else {
-        toast.err('Lưu thất bại', msg);
-      }
-    }
-  };
-
-  return (
-    <Modal
-      open
-      title={isEdit ? 'Sửa bàn' : 'Thêm bàn'}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="btn-ghost text-sm py-2" onClick={onClose}>Huỷ</button>
-          <button type="submit" form="table-form"
-            className="btn-primary text-sm py-2" disabled={isSubmitting}>
-            {isSubmitting ? 'Đang lưu…' : 'Lưu'}
-          </button>
-        </>
-      }
-    >
-      <form id="table-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-3">
-        <Field label="Mã bàn (VD: T1-07)" error={errors.code?.message}>
-          <input
-            placeholder="VD: T1-07"
-            className={'field py-2 uppercase ' + (errors.code ? 'border-danger' : '')}
-            {...register('code', {
-              required: 'Mã bàn là bắt buộc',
-              pattern: {
-                value: /^[A-Z0-9-]{2,10}$/i,
-                message: 'Chỉ chữ/số/dấu - và dài 2–10 ký tự',
-              },
-              setValueAs: (v) => (v ?? '').trim().toUpperCase(),
-            })}
-          />
-        </Field>
-
-        <Field label="Khu vực" error={errors.zone?.message}>
-          <select
-            className={'field py-2 ' + (errors.zone ? 'border-danger' : '')}
-            {...register('zone', {
-              required: 'Chọn khu vực',
-              validate: (v) => ZONE_VALUES.includes(v) || 'Khu vực không hợp lệ',
-            })}
-          >
-            <option value="indoor">Trong nhà</option>
-            <option value="outdoor">Sân vườn</option>
-            <option value="vip">VIP</option>
-          </select>
-        </Field>
-
-        <Field label="Sức chứa (số người)" error={errors.capacity?.message}>
-          <input
-            type="number" min="1" max="50"
-            className={'field py-2 ' + (errors.capacity ? 'border-danger' : '')}
-            {...register('capacity', {
-              required: 'Sức chứa là bắt buộc',
-              valueAsNumber: true,
-              min: { value: 1, message: 'Tối thiểu 1 người' },
-              max: { value: 50, message: 'Tối đa 50 người' },
-              validate: (v) => Number.isInteger(Number(v)) || 'Phải là số nguyên',
-            })}
-          />
-        </Field>
-
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" {...register('is_active')} />
-          <span className="text-sm">Đang sử dụng</span>
-        </label>
-      </form>
-    </Modal>
-  );
-}
-
-function Field({ label, error, children }) {
-  return (
-    <label className="block">
-      <span className="text-xs text-muted">{label}</span>
-      <div className="mt-1">{children}</div>
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
-    </label>
   );
 }

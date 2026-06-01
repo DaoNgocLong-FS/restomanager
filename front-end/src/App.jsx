@@ -95,7 +95,7 @@ export default function App() {
         <Route path="/cashier/orders"      element={<ProtectedRoute roles={['cashier','admin']}><CashierOrders /></ProtectedRoute>} />
         <Route path="/cashier/stats"       element={<ProtectedRoute roles={['cashier','admin']}><CashierStats /></ProtectedRoute>} />
         <Route path="/waiter/tables"       element={<ProtectedRoute roles={['waiter','admin']}><WaiterTables /></ProtectedRoute>} />
-        <Route path="/waiter/menu/:code"   element={<ProtectedRoute roles={['waiter','admin']}><WaiterMenu /></ProtectedRoute>} />
+        <Route path="/waiter/menu/:code"   element={<ProtectedRoute roles={['waiter','cashier','admin']}><WaiterMenu /></ProtectedRoute>} />
         <Route path="/profile"             element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       </Route>
 

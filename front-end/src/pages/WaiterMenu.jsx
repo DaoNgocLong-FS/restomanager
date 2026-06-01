@@ -32,7 +32,7 @@ export default function WaiterMenu() {
           Api.listMenu({ active: 'true' }),
           Api.listCategories(),
         ]);
-        const t = tables.find(x => x.code === code);
+        const t = tables.find(x => String(x.code) === code);
         if (!t) { toast.err('Không tìm thấy bàn'); navigate(-1); return; }
         setTable(t); setItems(m); setCats(c);
         try { setOpenOrder(await Api.getOpenOrderForTable(t.id)); } catch {}
