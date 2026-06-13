@@ -7,6 +7,14 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const ALLOWED = ['image/jpeg', 'image/png'];
+    if (ALLOWED.includes(file.mimetype)) {
+      cb(null, true);                                   // chấp nhận
+    } else {
+      cb(new Error('Chỉ chấp nhận ảnh JPG hoặc PNG'));  // từ chối
+    }
+  },
 });
 
 // PUBLIC reads — anyone (incl. waiter, cashier) can list menu

@@ -37,9 +37,6 @@ export const PAY_METHODS = [
   { key:'cash',     label:'Tiền mặt',     icon:'cash-outline' },
   { key:'transfer', label:'Chuyển khoản', icon:'qr-code-outline' },
   { key:'card',     label:'Quẹt thẻ',     icon:'card-outline' },
-  { key:'vnpay',    label:'VietQR Pro',   icon:'scan-outline' },
-  { key:'banking',  label:'Banking',      icon:'business-outline' },
-  { key:'momo',     label:'MoMo',         icon:'phone-portrait-outline' },
 ];
 
 export const PAY_LABELS = {

@@ -1,6 +1,6 @@
 // Cashier thanh toán: 6 phương thức + keypad + tiền thừa + receipt modal
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Api } from '../api';
@@ -77,6 +77,17 @@ export default function PaymentScreen({ route, navigation }) {
             </TouchableOpacity>
           ))}
         </View>
+
+        {method === 'transfer' && (
+          <View style={s.qrBox}>
+            <Text style={s.qrLabel}>Quét mã để chuyển khoản</Text>
+            <Image
+              source={require('../../assets/qr-transfer.png')}
+              style={s.qrImg}
+              resizeMode="contain"
+            />
+          </View>
+        )}
 
         {/* Khách trả */}
         <View style={s.card}>
@@ -209,6 +220,11 @@ const s = StyleSheet.create({
   keyWide:{ /* full width single button */ },
   confirmBtn:{ height:54, backgroundColor: colors.primary, borderRadius:14, flexDirection:'row', gap:8, alignItems:'center', justifyContent:'center', marginTop:6 },
   confirmTxt:{ color:'#fff', fontWeight:'700', fontSize:16 },
+  
+  qrBox:   { alignItems: 'center', backgroundColor: '#fff', borderRadius: 14,
+           padding: 12, marginBottom: 14, borderWidth: 1, borderColor: colors.borderSoft },
+  qrLabel: { fontSize: 12, color: colors.muted, marginBottom: 8 },
+  qrImg:   { width: 240, height: 280 },
 
   // Receipt modal
   modalBack:{ flex:1, backgroundColor:'rgba(0,0,0,0.5)', justifyContent:'flex-end' },

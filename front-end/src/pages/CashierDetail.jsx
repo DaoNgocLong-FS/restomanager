@@ -18,7 +18,6 @@ const PAY_METHODS = [
   { key: 'cash',     label: 'Tiền mặt',     icon: Banknote },
   { key: 'transfer', label: 'Chuyển khoản', icon: QrCode },
   { key: 'card',     label: 'Quẹt thẻ',     icon: CreditCard },
-  { key: 'vnpay',    label: 'VietQR Pro',   icon: ScanLine },
 ];
 
 export default function CashierDetail() {
@@ -297,6 +296,18 @@ function CheckoutModal({ table, order, sub, vat, total, onClose, onDone }) {
               </button>
             ))}
           </div>
+
+          {method === 'transfer' && (
+          <div className="flex flex-col items-center bg-surface-low rounded-xl p-3 mt-3 border border-border-soft">
+            <p className="text-xs text-muted mb-2">Quét mã để chuyển khoản</p>
+            <img
+              src="/qr-transfer.png"
+              alt="QR chuyển khoản MB Bank"
+              className="w-64 max-w-full rounded-lg"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          </div>
+        )}
         </div>
 
         <div>

@@ -10,7 +10,7 @@ import Modal from '../components/Modal';
 
 const EMPTY = {
   id: null, name: '', category_id: '', price: '',
-  description: '', is_available: true,
+  description: '', is_active: true,
   imageFile: null, imagePreview: null, currentImageUrl: null,
 };
 
@@ -42,13 +42,23 @@ export default function AdminMenu() {
   const openEdit = (m) => setEditing({
     id: m.id, name: m.name, category_id: m.category_id || categories[0]?.id || '',
     price: m.price, description: m.description || '',
-    is_available: !!m.is_available,
+    is_active: !!m.is_active,
     imageFile: null, imagePreview: m.image_url || null,
     currentImageUrl: m.image_url || null,
   });
 
   const onPickImage = (file) => {
     if (!file) return;
+    // Chỉ cho phép ảnh JPG / PNG
+    const ALLOWED = ['image/jpeg', 'image/png'];
+    if (!ALLOWED.includes(file.type)) {
+      toast.err('Sai định dạng', 'Chỉ chấp nhận ảnh JPG hoặc PNG.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.err('Ảnh quá lớn', 'Kích thước tối đa 5MB.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) =>
       setEditing(s => ({ ...s, imageFile: file, imagePreview: ev.target.result }));
@@ -68,7 +78,7 @@ export default function AdminMenu() {
       fd.append('category_id', f.category_id);
       fd.append('price', String(f.price));
       fd.append('description', f.description || '');
-      fd.append('is_available', f.is_available ? 'true' : 'false');
+      fd.append('is_active', f.is_active ? 'true' : 'false');
       if (f.imageFile) fd.append('image', f.imageFile);
 
       if (f.id) await Api.updateMenuItem(f.id, fd);
@@ -132,8 +142,8 @@ export default function AdminMenu() {
                   <h4 className="font-semibold text-on-surface line-clamp-1">{m.name}</h4>
                   <span className={
                     'text-xs shrink-0 ' +
-                    (m.is_available ? 'text-success' : 'text-danger')
-                  }>{m.is_available ? 'Đang bán' : 'Tạm ngừng'}</span>
+                    (m.is_active ? 'text-success' : 'text-danger')
+                  }>{m.is_active ? 'Đang bán' : 'Tạm ngừng'}</span>
                 </div>
                 <div className="text-xs text-muted mt-1 line-clamp-2 min-h-[2.5em]">
                   {m.description || '—'}
@@ -213,8 +223,8 @@ export default function AdminMenu() {
             <label className="block">
               <span className="text-xs text-muted">Hình ảnh</span>
               <input
-                type="file" accept="image/*"
-                onChange={(e) => onPickImage(e.target.files?.[0])}
+                type="file" accept="image/png, image/jpeg"
+                onChange={(e) => { onPickImage(e.target.files?.[0]); e.target.value = ''; }}
                 className="mt-1 w-full text-sm"
               />
             </label>
@@ -225,14 +235,35 @@ export default function AdminMenu() {
                 alt="preview"
               />
             )}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={editing.is_available}
-                onChange={(e) => setEditing(s => ({ ...s, is_available: e.target.checked }))}
-              />
-              <span className="text-sm">Đang bán</span>
-            </label>
+            <div>
+              <span className="text-xs text-muted">Trạng thái</span>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setEditing(s => ({ ...s, is_active: true }))}
+                  className={
+                    'py-2 rounded-xl border-2 text-sm font-semibold transition ' +
+                    (editing.is_active
+                      ? 'border-success bg-emerald-50 text-success'
+                      : 'border-border bg-white text-muted')
+                  }
+                >
+                  ✓ Có bán
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(s => ({ ...s, is_active: false }))}
+                  className={
+                    'py-2 rounded-xl border-2 text-sm font-semibold transition ' +
+                    (!editing.is_active
+                      ? 'border-danger bg-red-50 text-danger'
+                      : 'border-border bg-white text-muted')
+                  }
+                >
+                  ⏸ Tạm ngừng
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </Modal>
