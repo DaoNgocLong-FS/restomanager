@@ -29,7 +29,7 @@ exports.overview = asyncHandler(async (req, res) => {
   );
 
   const byHour = await db.query(
-    `SELECT EXTRACT(HOUR FROM created_at)::int   AS hour,
+    `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::int AS hour,
             COALESCE(SUM(final_amount),0)::numeric AS revenue,
             COUNT(*)::int                        AS count
      FROM invoices

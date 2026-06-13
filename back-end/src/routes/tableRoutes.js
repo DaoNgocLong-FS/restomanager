@@ -13,7 +13,7 @@ router.post  ('/',
   validateBody({
     code:     { required: true, type: 'string', minLength: 1 },
     zone:     { required: true, enum: ['indoor', 'outdoor', 'vip'] },
-    capacity: { required: true, type: 'integer', min: 1 },
+    capacity: { required: true, type: 'integer', min: 1, max: 6 },
   }),
   ctrl.create
 );

@@ -154,9 +154,15 @@ export default function AdminTables() {
             <label className="block">
               <span className="text-xs text-muted">Sức chứa</span>
               <input
-                type="number" min="1"
+                type="number" min="1" max="6"
                 value={editing.capacity}
-                onChange={(e) => setEditing(s => ({ ...s, capacity: e.target.value }))}
+                onChange={(e) => {
+                  let v = parseInt(e.target.value, 10);
+                  if (isNaN(v)) v = '';
+                  else if (v > 6) v = 6;
+                  else if (v < 1) v = 1;
+                  setEditing(s => ({ ...s, capacity: v }));
+                }}
                 className="field mt-1 py-2"
               />
             </label>

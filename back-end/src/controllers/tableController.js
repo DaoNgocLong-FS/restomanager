@@ -54,6 +54,12 @@ exports.create = asyncHandler(async (req, res) => {
 exports.update = asyncHandler(async (req, res) => {
   if (req.body && req.body.zone && !ZONES.includes(req.body.zone))
     throw ApiError.validation('Dữ liệu không hợp lệ', ['zone: phải thuộc {' + ZONES.join('|') + '}']);
+  // Giới hạn sức chứa 1–6 (chỉ kiểm tra khi có gửi lên, vì update là partial)
+  if (req.body && req.body.capacity !== undefined) {
+    const cap = Number(req.body.capacity);
+    if (!Number.isInteger(cap) || cap < 1 || cap > 6)
+      throw ApiError.validation('Dữ liệu không hợp lệ', ['capacity: phải là số nguyên từ 1 đến 6']);
+  }
   const t = await TableModel.update(req.params.id, req.body || {});
   if (!t) throw ApiError.notFound('Bàn không tồn tại');
   LogModel.write({
